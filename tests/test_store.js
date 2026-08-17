@@ -58,6 +58,28 @@ eq("area names are projected", registries.areaNames, { k: "Kitchen", h: "Hall" }
 eq("entity area wins over its device",
    registries.entityArea, { "light.a": "k", "sensor.b": "h" });
 
+// Favourite colours ride along in the registry entry's options, which is the
+// only place Home Assistant publishes them — they are not on the entity state.
+const withFavorites = Store.projectRegistries([], [
+  { entity_id: "light.a", options: { light: { favorite_colors: [
+    { color_temp_kelvin: 2700 }, { rgb_color: [255, 0, 0] }] } } },
+  { entity_id: "light.b", options: { light: { favorite_colors: [] } } },
+  { entity_id: "light.c", options: { conversation: { should_expose: true } } },
+  { entity_id: "light.d" }
+], []);
+eq("saved favourites are carried through",
+   withFavorites.favoriteColors["light.a"],
+   [{ color_temp_kelvin: 2700 }, { rgb_color: [255, 0, 0] }]);
+eq("a deliberately emptied list is carried as empty",
+   withFavorites.favoriteColors["light.b"], []);
+eq("and is distinguishable from a light that was never customised",
+   "light.b" in withFavorites.favoriteColors
+     && !("light.d" in withFavorites.favoriteColors), true);
+eq("an unrelated options namespace is ignored",
+   withFavorites.favoriteColors["light.c"], undefined);
+eq("an entry with no options is ignored",
+   withFavorites.favoriteColors["light.d"], undefined);
+
 eq("display names drive the stable index",
    Store.sortedIds(indexed, (id) => id === "sensor.b" ? "Alpha" : "Zulu"),
    ["sensor.b", "light.a"]);

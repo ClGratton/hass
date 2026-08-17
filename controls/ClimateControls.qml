@@ -72,19 +72,35 @@ Item {
     return typeof value === "number" ? value : fallback
   }
 
-  property real localTarget: -999
-  property real localLow: -999
-  property real localHigh: -999
+  PendingValue { id: pendingTarget }
+  PendingValue { id: pendingLow }
+  PendingValue { id: pendingHigh }
 
-  readonly property real target: localTarget > -999
-    ? localTarget : attr("temperature", range.min)
-  readonly property real low: localLow > -999
-    ? localLow : attr("target_temp_low", range.min)
-  readonly property real high: localHigh > -999
-    ? localHigh : attr("target_temp_high", range.max)
+  readonly property real target: pendingTarget.active
+    ? pendingTarget.value : attr("temperature", range.min)
+  readonly property real low: pendingLow.active
+    ? pendingLow.value : attr("target_temp_low", range.min)
+  readonly property real high: pendingHigh.active
+    ? pendingHigh.value : attr("target_temp_high", range.max)
+
+  onEntityChanged: {
+    var settled = function(pending, attribute) {
+      return pending.active
+        && Model.temperatureSettled(control.entity, attribute,
+                                    pending.value, control.step)
+    }
+    if (settled(pendingTarget, "temperature")) pendingTarget.clear()
+    if (settled(pendingLow, "target_temp_low")) pendingLow.clear()
+    if (settled(pendingHigh, "target_temp_high")) pendingHigh.clear()
+  }
 
   function clamp(value) {
     return Math.max(range.min, Math.min(range.max, value))
+  }
+
+  function snap(value, round) {
+    return Model.snapToStep(value, range.min, control.step,
+                            range.min, range.max, round)
   }
 
   function format(value) {
@@ -92,9 +108,11 @@ Item {
   }
 
   function commitTarget(value) {
-    control.localTarget = -999
-    control.hass.setClimateTemperature(control.entityId, control.clamp(value),
-                                       undefined, undefined)
+    var wanted = control.clamp(value)
+    var tag = control.hass.setClimateTemperature(control.entityId, wanted,
+                                                 undefined, undefined)
+    if (tag) pendingTarget.commit(wanted, tag)
+    else pendingTarget.clear()
   }
 
   function commitRange(changedLow, value) {
@@ -105,10 +123,23 @@ Item {
     var high = changedLow ? control.high : control.clamp(value)
     var normalizedLow = Math.min(low, high)
     var normalizedHigh = Math.max(low, high)
-    control.localLow = -999
-    control.localHigh = -999
-    control.hass.setClimateTemperature(control.entityId, undefined,
-                                       normalizedLow, normalizedHigh)
+    var tag = control.hass.setClimateTemperature(control.entityId, undefined,
+                                                 normalizedLow, normalizedHigh)
+    // Only the changed end is committed: re-arming the other one's deadline
+    // would let an end the thermostat never accepted outlive every nudge to
+    // this one.
+    var pending = changedLow ? pendingLow : pendingHigh
+    if (tag) pending.commit(changedLow ? normalizedLow : normalizedHigh, tag)
+    else pending.clear()
+  }
+
+  Connections {
+    target: control.hass
+    function onCommandFailed(tag) {
+      pendingTarget.rollback(tag)
+      pendingLow.rollback(tag)
+      pendingHigh.rollback(tag)
+    }
   }
 
   Column {
@@ -133,9 +164,13 @@ Item {
         minimum: control.range.min
         maximum: control.range.max
         step: control.step
+        // The thermostat's own target_temp_step, so a drag is quantized to
+        // what it can actually hold.
+        snap: true
 
-        onMoved: function(value) { control.localTarget = value }
+        onMoved: function(value) { pendingTarget.hold(value) }
         onReleased: function(value) { control.commitTarget(value) }
+        onCanceled: pendingTarget.clear()
       }
 
       // Nudge buttons under the track, for a precise half-degree that is hard
@@ -148,7 +183,8 @@ Item {
           tooltipText: "Cooler"
           foreground: control.fg
           fontFamily: control.family
-          onClicked: control.commitTarget(control.target - control.step)
+          onClicked: control.commitTarget(
+            control.snap(control.target - control.step, Math.ceil))
         }
 
         PanelActionButton {
@@ -156,7 +192,8 @@ Item {
           tooltipText: "Warmer"
           foreground: control.fg
           fontFamily: control.family
-          onClicked: control.commitTarget(control.target + control.step)
+          onClicked: control.commitTarget(
+            control.snap(control.target + control.step, Math.floor))
         }
       }
     }
@@ -172,9 +209,12 @@ Item {
       minimum: control.range.min
       maximum: Math.min(control.range.max, control.high)
       step: control.step
+      snap: true
+      stepBase: control.range.min
 
-      onMoved: function(value) { control.localLow = value }
+      onMoved: function(value) { pendingLow.hold(value) }
       onReleased: function(value) { control.commitRange(true, value) }
+      onCanceled: pendingLow.clear()
     }
 
     SliderRow {
@@ -187,9 +227,13 @@ Item {
       minimum: Math.max(control.range.min, control.low)
       maximum: control.range.max
       step: control.step
+      snap: true
+      // This minimum rides the low end, so the default base would move the grid.
+      stepBase: control.range.min
 
-      onMoved: function(value) { control.localHigh = value }
+      onMoved: function(value) { pendingHigh.hold(value) }
       onReleased: function(value) { control.commitRange(false, value) }
+      onCanceled: pendingHigh.clear()
     }
 
     Row {
