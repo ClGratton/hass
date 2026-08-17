@@ -188,6 +188,76 @@ section("temperature", () => {
     supported_features: 2, target_temp_low: 18, target_temp_high: 24,
     min_temp: 10, max_temp: 30
   });
+
+  const hvacEntity = entity("climate.a", "cool", {
+    hvac_modes: ["off", "heat", "cool", "dry", "fan_only", "cool", "", 1]
+  });
+  eq("advertised climate HVAC modes are preserved and cleaned",
+     Model.climateHvacModes(hvacEntity),
+     ["off", "heat", "cool", "dry", "fan_only"]);
+  eq("the HVAC mode is the climate state", Model.climateHvacMode(hvacEntity), "cool");
+  eq("a climate HVAC mode needs advertised options, not a feature bit",
+     Model.capabilitiesFor(hvacEntity).climateHvacMode, true);
+  eq("the selected advertised HVAC mode maps to the typed service payload",
+     Model.climateHvacModeData(hvacEntity, "dry"), { hvac_mode: "dry" });
+  eq("an undeclared HVAC mode is rejected",
+     Model.climateHvacModeData(hvacEntity, "turbo"), {});
+  eq("HVAC mode without advertised options is rejected",
+     Model.climateHvacModeData(entity("climate.a", "cool"), "heat"), {});
+  eq("heat_cool has its conventional label",
+     Model.climateHvacModeLabel("heat_cool"), "Heat/Cool");
+  eq("custom mode separators are humanized",
+     Model.climateFanModeLabel("eco_quiet-mode"), "Eco quiet mode");
+
+  const optionalModeCases = [
+    {
+      name: "fan", capability: "climateFanMode", feature: 8,
+      optionsAttribute: "fan_modes", currentAttribute: "fan_mode",
+      selected: "high", options: ["auto", "high"],
+      modes: Model.climateFanModes, data: Model.climateFanModeData,
+      payload: { fan_mode: "high" }
+    },
+    {
+      name: "preset", capability: "climatePresetMode", feature: 16,
+      optionsAttribute: "preset_modes", currentAttribute: "preset_mode",
+      selected: "away", options: ["none", "away"],
+      modes: Model.climatePresetModes, data: Model.climatePresetModeData,
+      payload: { preset_mode: "away" }
+    },
+    {
+      name: "swing", capability: "climateSwingMode", feature: 32,
+      optionsAttribute: "swing_modes", currentAttribute: "swing_mode",
+      selected: "vertical", options: ["off", "vertical"],
+      modes: Model.climateSwingModes, data: Model.climateSwingModeData,
+      payload: { swing_mode: "vertical" }
+    }
+  ];
+
+  optionalModeCases.forEach((modeCase) => {
+    const attributes = { supported_features: modeCase.feature };
+    attributes[modeCase.optionsAttribute] = modeCase.options;
+    attributes[modeCase.currentAttribute] = modeCase.options[0];
+    const modeEntity = entity("climate.a", "cool", attributes);
+
+    eq(`${modeCase.name} modes are preserved`,
+       modeCase.modes(modeEntity), modeCase.options);
+    eq(`${modeCase.name} mode needs its feature and options`,
+       Model.capabilitiesFor(modeEntity)[modeCase.capability], true);
+    eq(`${modeCase.name} mode is absent without its feature`,
+       Model.capabilitiesFor(entity("climate.a", "cool", {
+         [modeCase.optionsAttribute]: modeCase.options
+       }))[modeCase.capability], false);
+    eq(`${modeCase.name} mode is absent without advertised options`,
+       Model.capabilitiesFor(entity("climate.a", "cool", {
+         supported_features: modeCase.feature
+       }))[modeCase.capability], false);
+    eq(`${modeCase.name} payload has only its typed key`,
+       modeCase.data(modeEntity, modeCase.selected), modeCase.payload);
+    eq(`${modeCase.name} rejects an undeclared value`,
+       modeCase.data(modeEntity, "turbo"), {});
+  });
+
+
   eq("crossed target bounds are normalized",
      Model.climateTemperatureData(rangeEntity, undefined, 27, 16, "°C"),
      { target_temp_low: 16, target_temp_high: 27 });
@@ -267,6 +337,9 @@ section("control classification", () => {
        { supported_features: 1, temperature: 22 })), true);
   eq("climate without a target control does not expand",
      Model.isExpandable(entity("climate.a", "heat")), false);
+  eq("climate with advertised HVAC modes expands",
+     Model.isExpandable(entity("climate.a", "heat",
+       { hvac_modes: ["off", "heat", "cool"] })), true);
   eq("cover with open support expands",
      Model.isExpandable(entity("cover.a", "open", { supported_features: 1 })), true);
   eq("cover without advertised actions does not expand",

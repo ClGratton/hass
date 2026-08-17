@@ -615,6 +615,15 @@ QtObject {
     return root.callService(domain, "turn_on", entityId, {}, root.callTag(entityId))
   }
 
+  function setClimateHvacMode(entityId, mode) {
+    var data = Model.climateHvacModeData(root.states[entityId], mode)
+    if (Object.keys(data).length === 0) {
+      return root.rejectAction("This climate entity does not report a controllable HVAC mode.")
+    }
+    return root.callService("climate", "set_hvac_mode", entityId, data,
+                            root.callTag(entityId))
+  }
+
   function setClimateTemperature(entityId, target, low, high) {
     var entity = root.states[entityId]
     var data = Model.climateTemperatureData(
@@ -625,6 +634,34 @@ QtObject {
     root.callService("climate", "set_temperature", entityId, data,
                      root.callTag(entityId))
   }
+
+  function setClimateFanMode(entityId, mode) {
+    var data = Model.climateFanModeData(root.states[entityId], mode)
+    if (Object.keys(data).length === 0) {
+      return root.rejectAction("This climate entity does not report a controllable fan mode.")
+    }
+    return root.callService("climate", "set_fan_mode", entityId, data,
+                            root.callTag(entityId))
+  }
+
+  function setClimatePresetMode(entityId, mode) {
+    var data = Model.climatePresetModeData(root.states[entityId], mode)
+    if (Object.keys(data).length === 0) {
+      return root.rejectAction("This climate entity does not report a controllable preset.")
+    }
+    return root.callService("climate", "set_preset_mode", entityId, data,
+                            root.callTag(entityId))
+  }
+
+  function setClimateSwingMode(entityId, mode) {
+    var data = Model.climateSwingModeData(root.states[entityId], mode)
+    if (Object.keys(data).length === 0) {
+      return root.rejectAction("This climate entity does not report a controllable swing mode.")
+    }
+    return root.callService("climate", "set_swing_mode", entityId, data,
+                            root.callTag(entityId))
+  }
+
 
   function refresh() {
     root.send({ op: "refresh" })
