@@ -27,6 +27,16 @@ QtObject {
   property bool configured: false
   property bool demoMode: false
   property string baseUrl: ""
+  // Optional alternate address for the same instance — a LAN address, say —
+  // the bridge tries first, but only on trustedNetwork. Shares baseUrl's
+  // credential; never its own keyring origin. See Connection.signature and
+  // CredentialManager.
+  property string localUrl: ""
+  // The Wi-Fi network name localUrl requires a match against before the
+  // bridge will ever try it. See bin/hass-bridge's current_wifi_ssid.
+  property string trustedNetwork: ""
+  // True only while connected through localUrl rather than baseUrl.
+  property bool usingLocal: false
   property int connectionGeneration: 0
   property bool connectionSuppressed: false
 
@@ -82,6 +92,8 @@ QtObject {
   function currentConfig() {
     return {
       baseUrl: root.baseUrl,
+      localUrl: root.localUrl,
+      trustedNetwork: root.trustedNetwork,
       demoMode: root.demoMode,
       favorites: root.liveFavorites.slice(),
       demoFavorites: root.demoFavorites.slice(),
@@ -202,7 +214,7 @@ QtObject {
   function finishRemoveConnection() {
     root.connectionSuppressed = false
     root.saveConfig({
-      baseUrl: "", demoMode: false, favorites: [],
+      baseUrl: "", localUrl: "", trustedNetwork: "", demoMode: false, favorites: [],
       displayNameOverrides: {}, iconOverrides: {}, selectedTab: "favorites"
     })   // demoFavorites untouched: not part of the connection
   }
@@ -235,11 +247,30 @@ QtObject {
     root.reconcileConnection()
   }
 
-  function applyConnection(url, token, demo) {
+  function applyConnection(url, localUrl, trustedNetwork, token, demo) {
     var origin = demo ? "demo" : Connection.normalizeOrigin(url)
     if (!origin) {
       root.phase = "error"
       root.lastError = "Enter a valid http(s) or ws(s) Home Assistant URL."
+      return false
+    }
+    // Optional, and validated the same way, but blank is always fine — it
+    // just means no local fallback.
+    var trimmedLocal = String(localUrl || "").trim()
+    if (!demo && trimmedLocal && !Connection.normalizeOrigin(trimmedLocal)) {
+      root.phase = "error"
+      root.lastError = "Enter a valid http(s) or ws(s) local network URL, or leave it blank."
+      return false
+    }
+    // A local URL with no trusted network to gate it would otherwise be tried
+    // on every Wi-Fi the laptop ever joins, sending the token to whatever
+    // happens to answer at that address. The bridge enforces this too — this
+    // check exists to fail fast with a clear message instead of a silently
+    // inert field.
+    var trimmedTrust = String(trustedNetwork || "").trim()
+    if (!demo && trimmedLocal && Connection.trustedNetworkList(trimmedTrust).length === 0) {
+      root.phase = "error"
+      root.lastError = "Enter at least one trusted Wi-Fi network name for the local URL, or leave the local URL blank."
       return false
     }
     if (!demo && !token && root.requiresTokenFor(url)) {
@@ -249,13 +280,17 @@ QtObject {
     }
     root.connectionSuppressed = false
     // Start the serialized write before applyConfig runs so reconciliation
-    // cannot race a lookup of the previous credential.
+    // cannot race a lookup of the previous credential. The local URL is never
+    // its own keyring origin: it shares whatever is stored for `origin`.
     if (!demo && token.length > 0 && !credentials.store(token, origin)) {
       root.phase = "error"
       root.lastError = "Could not start token storage while the keyring is busy."
       return false
     }
-    root.saveConfig({ baseUrl: url, demoMode: demo })
+    root.saveConfig({
+      baseUrl: url, localUrl: demo ? "" : trimmedLocal,
+      trustedNetwork: demo ? "" : trimmedTrust, demoMode: demo
+    })
     return true
   }
 
@@ -280,6 +315,8 @@ QtObject {
 
     root.demoMode = config.demoMode
     root.baseUrl = config.baseUrl
+    root.localUrl = config.localUrl
+    root.trustedNetwork = config.trustedNetwork
     root.liveFavorites = config.favorites
     root.demoFavorites = config.demoFavorites
     root.displayNameOverrides = config.displayNameOverrides
@@ -333,7 +370,8 @@ QtObject {
 
     // Connection.js owns this rule, so the definition of "same connection"
     // cannot drift from the one the tests pin.
-    var signature = Connection.signature(root.demoMode, root.baseUrl)
+    var signature = Connection.signature(
+      root.demoMode, root.baseUrl, root.localUrl, root.trustedNetwork)
     if (!signature) {
       root.phase = "error"
       root.lastError = "Home Assistant URL is invalid."
@@ -411,6 +449,8 @@ QtObject {
     root.send({
       op: "config",
       url: root.baseUrl,
+      localUrl: root.localUrl,
+      trustedNetwork: root.trustedNetwork,
       token: token,
       generation: root.connectionGeneration
     })
@@ -718,6 +758,7 @@ QtObject {
       root.phase = transition.state.phase
       root.lastError = transition.state.error
       root.lastErrorKind = transition.state.errorKind
+      root.usingLocal = transition.state.phase === "connected" && event.usingLocal === true
       break
     case "states":
       root.applyStates(event.entities || [])

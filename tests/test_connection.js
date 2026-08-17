@@ -75,6 +75,48 @@ eq("an unusable URL has no signature",
    Connection.signature(false, "ftp://ha.local"), "");
 eq("a bracket typo has no signature",
    Connection.signature(false, "https://ha.local:8123]"), "");
+// The local URL shares the primary URL's credential origin — it must never
+// appear as, or affect, the credential scope — but it does have to change the
+// signature so reconcileConnection restarts the bridge when it is edited.
+eq("a blank local URL does not change the signature",
+   Connection.signature(false, "https://ha.local:8123", ""),
+   Connection.signature(false, "https://ha.local:8123"));
+eq("a local URL is folded into the signature",
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123"),
+   "https://ha.local:8123|https://ha.local:8123|https://192.168.1.50:8123");
+eq("changing only the local URL changes the signature",
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123")
+     === Connection.signature(false, "https://ha.local:8123", "https://192.168.1.51:8123"),
+   false);
+eq("a blank trusted network does not change the signature",
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123", ""),
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123"));
+eq("the trusted network is folded into the signature",
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123", "Home"),
+   "https://ha.local:8123|https://ha.local:8123|https://192.168.1.50:8123|Home");
+eq("changing only the trusted network changes the signature",
+   Connection.signature(false, "https://ha.local:8123", "https://192.168.1.50:8123", "Home")
+     === Connection.signature(false, "https://ha.local:8123",
+                              "https://192.168.1.50:8123", "Office"),
+   false);
+eq("a blank trusted network list is empty",
+   Connection.trustedNetworkList(""), []);
+eq("a single trusted network is a one-item list",
+   Connection.trustedNetworkList("Home"), ["Home"]);
+eq("comma-separated names are split and trimmed",
+   Connection.trustedNetworkList(" Home , Home 5G ,Office "),
+   ["Home", "Home 5G", "Office"]);
+eq("only commas and whitespace is still empty",
+   Connection.trustedNetworkList(" , , "), []);
+eq("no active line means no detected ssid",
+   Connection.parseNmcliActiveSsid("no:Neighbor\nno:CoffeeShop"), "");
+eq("the active line's ssid is detected",
+   Connection.parseNmcliActiveSsid("no:Neighbor\nyes:Home\nno:CoffeeShop"), "Home");
+eq("an escaped colon in the ssid is unescaped",
+   Connection.parseNmcliActiveSsid("yes:Office\\:5G"), "Office:5G");
+eq("an escaped backslash in the ssid is unescaped",
+   Connection.parseNmcliActiveSsid("yes:Back\\\\slash"), "Back\\slash");
+eq("empty input has no detected ssid", Connection.parseNmcliActiveSsid(""), "");
 eq("matching generation is accepted", Connection.acceptsGeneration(4, 4), true);
 eq("old generation is rejected", Connection.acceptsGeneration(5, 4), false);
 eq("missing generation is rejected", Connection.acceptsGeneration(5, undefined), false);

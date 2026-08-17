@@ -4,6 +4,38 @@
 // outside Service.qml makes the security boundary testable with Node as well
 // as usable by the QML service.
 
+// Mirrors bin/hass-bridge's Bridge.trusted_network_list: a comma-separated
+// list of Wi-Fi network names, since a router commonly broadcasts more than
+// one (separate 2.4GHz/5GHz SSIDs). Kept here so the settings UI's notion of
+// "is a trusted network actually configured" cannot drift from the bridge's
+// — a field containing only commas or whitespace must count as empty in both.
+function trustedNetworkList(value) {
+  return String(value || "").split(",")
+    .map(function(name) { return name.trim() })
+    .filter(function(name) { return name.length > 0 })
+}
+
+// Mirrors bin/hass-bridge's current_wifi_ssid line parsing: nmcli -t's terse
+// output is "active:ssid" per line, with a literal ':' inside a field escaped
+// as '\:'. Settings.qml uses this only to suggest a value for the trusted
+// network field — the bridge is the actual security boundary and re-checks
+// the current network independently in Python before ever using a local URL.
+function parseNmcliActiveSsid(text) {
+  var lines = String(text || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i]
+    var splitAt = -1
+    for (var c = 0; c < line.length; c++) {
+      if (line[c] === ":" && line[c - 1] !== "\\") { splitAt = c; break }
+    }
+    if (splitAt === -1) continue
+    if (line.slice(0, splitAt) !== "yes") continue
+    var ssid = line.slice(splitAt + 1).replace(/\\:/g, ":").replace(/\\\\/g, "\\")
+    if (ssid) return ssid
+  }
+  return ""
+}
+
 function preparedUrl(value) {
   var text = String(value || "").trim()
   if (!text) return ""
@@ -76,10 +108,22 @@ function normalizeOrigin(value) {
 //
 // Empty when the URL cannot be normalized; callers treat that as invalid
 // rather than as a connection worth starting.
-function signature(demoMode, value) {
+//
+// localValue is optional: an alternate address for the same instance (a LAN
+// address, only ever used on trustedNetwork — see bin/hass-bridge). It shares
+// value's credential origin, so both are folded into the signature only to
+// restart the bridge when either changes — neither contributes an origin of
+// its own.
+function signature(demoMode, value, localValue, trustedNetwork) {
   if (demoMode) return "demo"
   var origin = normalizeOrigin(value)
-  return origin ? origin + "|" + String(value || "").trim() : ""
+  if (!origin) return ""
+  var text = origin + "|" + String(value || "").trim()
+  var local = String(localValue || "").trim()
+  if (local) text += "|" + local
+  var trust = String(trustedNetwork || "").trim()
+  if (trust) text += "|" + trust
+  return text
 }
 
 function acceptsGeneration(activeGeneration, eventGeneration) {

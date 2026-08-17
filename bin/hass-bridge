@@ -12,10 +12,21 @@ writes commands on our stdin and reads events from our stdout.
 
 Commands (stdin)
     {"protocolVersion":1,"op":"config","generation":7,
-     "url":"https://ha.local:8123","token":"..."}
+     "url":"https://ha.local:8123","localUrl":"https://192.168.1.50:8123",
+     "trustedNetwork":"Home,Home 5G","token":"..."}
         Connect, or reconnect with new credentials. The token arrives here
         rather than in argv because /proc/<pid>/cmdline is readable by every
-        process running as this user.
+        process running as this user. localUrl is optional: an alternate
+        address for the same instance (a LAN address, say). It is only ever
+        tried, ahead of url and with a short timeout, when trustedNetwork is
+        set and one of its comma-separated names matches the current Wi-Fi
+        network name (checked via nmcli — a router commonly broadcasts more
+        than one SSID, e.g. separate 2.4GHz/5GHz names, hence the list).
+        Otherwise every attempt goes straight to url. This is what stops the
+        token from being sent to whatever happens to answer at that address
+        on an untrusted network — localUrl shares url's token rather than
+        needing its own, so this check is the only thing standing between it
+        and an unwanted disclosure.
     {"op":"call_service","domain":"light","service":"turn_on",
      "entity_id":"light.x","data":{"brightness_pct":40},"tag":"..."}
     {"op":"refresh"}       re-request the full state snapshot
@@ -25,7 +36,9 @@ Commands (stdin)
 Events (stdout)
     Every event includes protocolVersion and generation.
     {"ev":"phase","phase":"idle|connecting|connected|error",
-     "error":"...","errorKind":"connection|synchronization|credential|protocol"}
+     "error":"...","errorKind":"connection|synchronization|credential|protocol",
+     "usingLocal":true}   usingLocal is present and true only when phase is
+                          "connected" and the connection went through localUrl
     {"ev":"states","entities":[...]}          full snapshot, replaces the model
     {"ev":"state_changed","entity":{...}}     single entity changed
     {"ev":"removed","entity_id":"..."}        entity disappeared
@@ -47,8 +60,10 @@ import json
 import os
 import queue
 import random
+import re
 import socket
 import ssl
+import subprocess
 import sys
 import threading
 import time
@@ -104,6 +119,63 @@ PROTOCOL_VERSION = 1
 BACKOFF_START = 1.0
 BACKOFF_MAX = 30.0
 
+# How long a local-network candidate gets before falling back to the primary
+# URL. Short: the whole point is that a laptop off the home network should not
+# sit there waiting out the normal OPEN_TIMEOUT before trying the URL that can
+# actually answer. A closed port refuses well inside this anyway; the timeout
+# only matters for an address nothing answers at all.
+LOCAL_CONNECT_TIMEOUT = 2.0
+
+# Bound on the nmcli call in current_wifi_ssid(), so a hung network stack
+# cannot wedge the bridge's single-threaded run loop.
+NETWORK_CHECK_TIMEOUT = 2.0
+
+
+def current_wifi_ssid():
+    """Best-effort current Wi-Fi network name, or None.
+
+    None whenever this cannot be determined with confidence — no
+    NetworkManager, no active Wi-Fi, a timeout, unparseable output — not just
+    when nothing matches. The local URL has to fail closed here: this is the
+    only thing standing between it and sending a token to whatever happens to
+    answer at that address on a network that was never trusted.
+    """
+    # Test-only seam. Real installs never set this; nothing in this plugin
+    # sets it either. It exists because tests/test_bridge.py drives the
+    # bridge as a real subprocess with no way to patch this function
+    # directly, and CI has no controllable Wi-Fi to join.
+    override = os.environ.get("HASS_BRIDGE_TEST_SSID")
+    if override is not None:
+        return override or None
+
+    try:
+        result = subprocess.run(
+            # --rescan no: this only needs whatever NetworkManager already
+            # knows about the currently active connection, not a fresh scan
+            # of every nearby network. Without it, nmcli blocks on a full
+            # radio scan — several seconds, during which this call would
+            # freeze the bridge's single-threaded run loop.
+            ["nmcli", "-t", "-f", "active,ssid", "dev", "wifi", "list",
+             "--rescan", "no"],
+            capture_output=True, text=True, timeout=NETWORK_CHECK_TIMEOUT)
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+
+    for line in result.stdout.splitlines():
+        # nmcli's terse output escapes a literal ':' inside a field as '\:',
+        # so only an unescaped colon is a field separator.
+        fields = re.split(r"(?<!\\):", line, maxsplit=1)
+        if len(fields) != 2:
+            continue
+        active, raw_ssid = fields
+        if active != "yes":
+            continue
+        ssid = raw_ssid.replace("\\:", ":").replace("\\\\", "\\")
+        return ssid or None
+    return None
+
 
 def now():
     return time.monotonic()
@@ -126,9 +198,10 @@ class WebSocketError(Exception):
 class WsTransport:
     kind = "live"
 
-    def __init__(self, url, verify_tls=True):
+    def __init__(self, url, verify_tls=True, open_timeout=OPEN_TIMEOUT):
         self.url = url
         self.verify_tls = verify_tls
+        self.open_timeout = open_timeout
         self.ws = None
 
     def connect(self):
@@ -143,7 +216,7 @@ class WsTransport:
                 ssl=ssl_context,
                 proxy=None,
                 compression=None,
-                open_timeout=OPEN_TIMEOUT,
+                open_timeout=self.open_timeout,
                 close_timeout=CLOSE_TIMEOUT,
                 ping_interval=PING_INTERVAL,
                 ping_timeout=PING_TIMEOUT,
@@ -564,6 +637,9 @@ class Bridge:
         self.demo = demo
         self.verify_tls = verify_tls
         self.url = ""
+        self.local_url = ""
+        self.trusted_network = ""
+        self.using_local = False
         self.token = ""
         self.generation = 0
         self.transport_epoch = 0
@@ -625,6 +701,8 @@ class Bridge:
             return
         self.phase = phase
         payload = {"ev": "phase", "phase": phase}
+        if phase == "connected":
+            payload["usingLocal"] = self.using_local
         if error:
             payload["error"] = self.safe_error(error)
             payload["errorKind"] = error_kind
@@ -696,6 +774,11 @@ class Bridge:
     def apply_config(self, command):
         raw_url = command.get("url") or ""
         url = raw_url.strip() if isinstance(raw_url, str) else ""
+        raw_local_url = command.get("localUrl") or ""
+        local_url = raw_local_url.strip() if isinstance(raw_local_url, str) else ""
+        raw_trusted_network = command.get("trustedNetwork") or ""
+        trusted_network = raw_trusted_network.strip() \
+            if isinstance(raw_trusted_network, str) else ""
         token = command.get("token") or ""
         if not isinstance(token, str):
             token = ""
@@ -707,6 +790,8 @@ class Bridge:
             next_generation = self.generation + 1
 
         if (next_generation == self.generation and url == self.url
+                and local_url == self.local_url
+                and trusted_network == self.trusted_network
                 and token == self.token and self.transport is not None):
             return
 
@@ -715,6 +800,8 @@ class Bridge:
         self.disconnect()
         self.generation = next_generation
         self.url = url
+        self.local_url = local_url
+        self.trusted_network = trusted_network
         self.token = token
         self.want_connect = self.demo or bool(url and token)
         self.backoff = BACKOFF_START
@@ -732,6 +819,8 @@ class Bridge:
             self.generation += 1
         self.want_connect = False
         self.url = ""
+        self.local_url = ""
+        self.trusted_network = ""
         self.token = ""
         self.set_phase("idle", force=True)
 
@@ -890,35 +979,83 @@ class Bridge:
 
     def connect(self):
         self.set_phase("connecting")
-        try:
-            if self.demo:
+        if self.demo:
+            try:
                 self.transport = DemoTransport()
-            else:
-                self.transport = WsTransport(
-                    self.websocket_url(), verify_tls=self.verify_tls)
-        except (WebSocketError, ValueError) as exc:
-            # A URL we cannot even parse will not start working on its own, so
-            # retrying it just spins. Wait for the shell to send a better one.
-            # ValueError is belt and braces: websocket_url already converts the
-            # ones urllib raises, and this loop must not be able to die on a
-            # parse error the shell cannot see and cannot restart us from.
-            self.transport = None
-            self.set_phase("error", self.safe_error(exc))
-            self.want_connect = False
+                self.transport.connect()
+            except Exception as exc:
+                self.transport = None
+                self.schedule_retry(self.explain(exc))
+                return
+            self.using_local = False
+            self._finish_connect()
             return
 
-        try:
-            self.transport.connect()
-        except Exception as exc:
-            self.transport = None
-            self.schedule_retry(self.explain(exc))
+        # The local URL is tried first, ahead of the primary URL, but only
+        # when the current Wi-Fi network name is one of trustedNetwork's
+        # comma-separated entries — this is re-checked on every attempt since
+        # the network can have changed since the last one (a laptop rejoining
+        # home wifi, or leaving it). Without this, a local URL would silently
+        # send the token to whatever answers at that address on any untrusted
+        # network the laptop joins. A local candidate that does not even parse
+        # is skipped rather than fatal: it is optional, so a typo there should
+        # not stop the primary URL.
+        candidates = []
+        trusted = self.trusted_network_list()
+        if self.local_url and trusted and current_wifi_ssid() in trusted:
+            candidates.append((self.local_url, True, LOCAL_CONNECT_TIMEOUT))
+        candidates.append((self.url, False, OPEN_TIMEOUT))
+
+        last_exc = None
+        for raw_url, is_local, open_timeout in candidates:
+            try:
+                ws_url = self.websocket_url(raw_url)
+            except (WebSocketError, ValueError) as exc:
+                # ValueError is belt and braces: websocket_url already converts
+                # the ones urllib raises, and this loop must not be able to die
+                # on a parse error the shell cannot see and cannot restart us
+                # from.
+                last_exc = exc
+                if is_local:
+                    continue
+                # The primary URL we cannot even parse will not start working
+                # on its own, so retrying it just spins. Wait for the shell to
+                # send a better one.
+                self.transport = None
+                self.set_phase("error", self.safe_error(exc))
+                self.want_connect = False
+                return
+
+            transport = WsTransport(
+                ws_url, verify_tls=self.verify_tls, open_timeout=open_timeout)
+            try:
+                transport.connect()
+            except Exception as exc:
+                last_exc = exc
+                continue
+
+            self.transport = transport
+            self.using_local = is_local
+            self._finish_connect()
             return
+
+        self.transport = None
+        self.schedule_retry(self.explain(last_exc))
+
+    def _finish_connect(self):
         self.transport_epoch += 1
         self.authenticated = False
         self.subscription_ready = False
         self.snapshot_ready = False
 
-    def websocket_url(self):
+    def trusted_network_list(self):
+        # A router commonly broadcasts more than one name — separate 2.4GHz
+        # and 5GHz SSIDs are the usual case — so this is a comma-separated
+        # list, matched against exactly, not a single name.
+        return [name.strip() for name in self.trusted_network.split(",")
+                if name.strip()]
+
+    def websocket_url(self, raw_url):
         # Every parse step below can raise ValueError on input the settings
         # overlay was willing to accept: urlsplit rejects an unbalanced bracket
         # ("https://ha.local:8123]") with "Invalid IPv6 URL", and .hostname and
@@ -926,14 +1063,14 @@ class Bridge:
         # any of those kills the whole bridge process for what is really just a
         # typo, so the entire parse is funnelled into WebSocketError.
         try:
-            parts = urllib.parse.urlsplit(self.url)
+            parts = urllib.parse.urlsplit(raw_url)
             # "homeassistant.local:8123" parses as scheme "homeassistant.local"
             # with no netloc, and "//homeassistant.local:8123" as a netloc with
             # no scheme. Both are natural things to type, and both need the
             # same repair. Assume TLS: guessing http would quietly put the
             # token on the wire in the clear.
             if not parts.scheme or not parts.netloc:
-                parts = urllib.parse.urlsplit("https://" + self.url.lstrip("/"))
+                parts = urllib.parse.urlsplit("https://" + raw_url.lstrip("/"))
             scheme = WS_SCHEMES.get(parts.scheme)
             if scheme is None:
                 # Never fall back to ws:// here. A typo like "htps://" would then
@@ -941,7 +1078,7 @@ class Bridge:
                 raise WebSocketError(
                     "unsupported scheme %r — use http:// or https://" % parts.scheme)
             if not parts.hostname:
-                raise WebSocketError("no host in URL: %s" % self.url)
+                raise WebSocketError("no host in URL: %s" % raw_url)
             if parts.username or parts.password:
                 raise WebSocketError(
                     "credentials aren't allowed in the Home Assistant URL")
@@ -961,6 +1098,7 @@ class Bridge:
             except Exception:
                 pass
         self.transport = None
+        self.using_local = False
         self.authenticated = False
         self.subscription_ready = False
         self.snapshot_ready = False

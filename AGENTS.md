@@ -12,7 +12,13 @@ Canonical public repository: `https://github.com/konradk/hass`.
 
 The plugin must remain installable without npm, pip, a virtual environment, or
 first-run downloads. Python 3.11 or newer, `secret-tool`, and the vendored
-`websockets` package are the runtime dependencies.
+`websockets` package are the runtime dependencies. `nmcli` is an additional,
+conditional one, invoked from two places: the bridge (only when a local
+network URL is actually configured, to gate every connection attempt — see
+the security invariant below) and the settings UI (each time it opens, to
+suggest a value for the trusted-network field; read-only, never a security
+decision). Its absence must degrade to "never use the local URL" for the
+bridge and "no suggestion" for the UI, not an error either way.
 
 ## Architecture map
 
@@ -45,7 +51,24 @@ to `Service.qml`.
 - Scope credentials to a normalized server origin. Changing origin must never
   silently reuse a credential. Credential deletion must target an explicit
   origin and must not remove a saved live credential as a side effect of demo
-  mode.
+  mode. The optional local-network URL (`localUrl`) is a deliberate, narrow
+  exception: it is an alternate address for the same instance the primary URL
+  already names, not a second server, so it intentionally shares the primary
+  origin's stored token rather than getting its own keyring entry. Do not add
+  separate credential storage for it, and do not let it participate in
+  `currentOrigin()`/`requiresTokenFor()` — those stay scoped to the primary
+  URL only.
+- `localUrl` must never be tried unless `trustedNetwork` is set and one of its
+  comma-separated names matches the current Wi-Fi network name
+  (`current_wifi_ssid()` and `trusted_network_list()` in `bin/hass-bridge`,
+  checked fresh on every connection attempt — the list exists because a
+  router commonly broadcasts more than one SSID). This is the only thing standing
+  between an alternate address and sending the token to whatever happens to
+  answer there on a network the user never trusted — fail closed on every
+  path (no NetworkManager, an nmcli error or timeout, no active Wi-Fi, no
+  match) rather than defaulting to "trusted". Enforce this in both the bridge
+  and `Service.applyConnection` — the settings UI check is a fast-fail
+  convenience, not the security boundary.
 - Treat `http://` and `ws://` as plaintext transport. Any UI path that permits
   them must make the token-exposure risk explicit; never downgrade an invalid
   or unknown scheme to plaintext.
