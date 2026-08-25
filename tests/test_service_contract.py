@@ -161,6 +161,10 @@ def main():
     check("room card ListModel roles keep stable primitive types",
           "controlPending: !!(" in room_projection
           and ') || ""' in room_projection)
+    check("history is a tagged bridge op, not a Home Assistant service call",
+          'op: "history"' in function_block("requestHistory")
+          and "root.callService(" not in function_block("requestHistory")
+          and "historyGraph" in function_block("requestHistory"))
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)
