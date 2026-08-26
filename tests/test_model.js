@@ -122,6 +122,27 @@ section("badges", () => {
      Model.badgeText(entity("climate.a", "heat")), "Heat");
 });
 
+section("room-reading classification", () => {
+  const temperature = entity("sensor.air_temperature", "26", {
+    device_class: "temperature", unit_of_measurement: "°C"
+  });
+  eq("temperature becomes a compact room reading", Model.environmentalReading(temperature), {
+    entityId: "sensor.air_temperature", kind: "temperature", label: "Temperature",
+    value: "26 °C", quality: "neutral", order: 10
+  });
+  eq("PM2.5 gets a quality band",
+     Model.environmentalReading(entity("sensor.air_pm2_5", "5", {
+       device_class: "pm25", unit_of_measurement: "µg/m³"
+     })).quality, "good");
+  eq("VOC index fallback recognizes the IKEA-style name",
+     Model.environmentalReading(entity("sensor.air_voc_index", "250")).quality,
+     "poor");
+  eq("battery is not treated as a room reading",
+     Model.environmentalReading(entity("sensor.air_battery", "100", {
+       device_class: "battery"
+     })), null);
+});
+
 section("brightness", () => {
   // Modern Home Assistant advertises dimming through supported_color_modes.
   eq("a dimmable colour mode counts",

@@ -2,7 +2,9 @@
 
 var KEYS = [
   "baseUrl", "localUrl", "trustedNetwork", "demoMode", "favorites",
-  "demoFavorites", "groupByArea", "showEntityIcons", "selectedTab",
+  "demoFavorites", "roomReadings", "demoRoomReadings",
+  "panelOrder", "demoPanelOrder",
+  "groupByArea", "showEntityIcons", "selectedTab",
   "displayNameOverrides", "iconOverrides"
 ]
 
@@ -17,6 +19,66 @@ function stringList(value, fallback) {
       seen[value[i]] = true
       out.push(value[i])
     }
+  }
+  return out
+}
+
+function deviceList(value) {
+  if (!Array.isArray(value)) return []
+  var out = []
+  var seen = {}
+  for (var i = 0; i < value.length; i++) {
+    var id = value[i]
+    if (typeof id !== "string" || !id
+        || id === "__proto__" || id === "constructor" || id === "prototype"
+        || !/^[A-Za-z0-9_.:-]+$/.test(id) || seen[id]) continue
+    seen[id] = true
+    out.push(id)
+  }
+  return out
+}
+
+function panelItemList(value) {
+  if (!Array.isArray(value)) return []
+  var out = []
+  var seen = {}
+  for (var i = 0; i < value.length; i++) {
+    var id = value[i]
+    var valid = typeof id === "string"
+      && (/^[a-z0-9_]+\.[a-z0-9_]+$/.test(id)
+          || /^room_reading:[A-Za-z0-9_.:-]+$/.test(id))
+    if (!valid || seen[id]) continue
+    seen[id] = true
+    out.push(id)
+  }
+  return out
+}
+
+function normalizedPanelOrder(value, favorites, roomReadings) {
+  var selected = {}
+  for (var f = 0; f < favorites.length; f++) selected[favorites[f]] = true
+  for (var r = 0; r < roomReadings.length; r++) {
+    selected["room_reading:" + roomReadings[r]] = true
+  }
+
+  var requested = panelItemList(value)
+  var out = []
+  var included = {}
+  for (var i = 0; i < requested.length; i++) {
+    if (selected[requested[i]]) {
+      out.push(requested[i])
+      included[requested[i]] = true
+    }
+  }
+  // Old configurations had no combined order. Preserve the existing entity
+  // order and append newly selected room cards, which is where a newly starred
+  // item belongs.
+  for (var e = 0; e < favorites.length; e++) {
+    if (!included[favorites[e]]) out.push(favorites[e])
+  }
+  for (var d = 0; d < roomReadings.length; d++) {
+    var key = "room_reading:" + roomReadings[d]
+    if (!included[key]) out.push(key)
   }
   return out
 }
@@ -45,6 +107,12 @@ function parse(text, demoDefaults) {
     error = "config.json is not valid JSON"
   }
 
+  var favorites = stringList(raw.favorites, [])
+  var demoFavorites = stringList(raw.demoFavorites,
+                                 Array.isArray(demoDefaults) ? demoDefaults : [])
+  var roomReadings = deviceList(raw.roomReadings)
+  var demoRoomReadings = deviceList(raw.demoRoomReadings)
+
   return {
     error: error,
     config: {
@@ -57,9 +125,13 @@ function parse(text, demoDefaults) {
       // ever tried. See bin/hass-bridge's current_wifi_ssid.
       trustedNetwork: typeof raw.trustedNetwork === "string" ? raw.trustedNetwork : "",
       demoMode: raw.demoMode === true,
-      favorites: stringList(raw.favorites, []),
-      demoFavorites: stringList(raw.demoFavorites,
-                                Array.isArray(demoDefaults) ? demoDefaults : []),
+      favorites: favorites,
+      demoFavorites: demoFavorites,
+      roomReadings: roomReadings,
+      demoRoomReadings: demoRoomReadings,
+      panelOrder: normalizedPanelOrder(raw.panelOrder, favorites, roomReadings),
+      demoPanelOrder: normalizedPanelOrder(
+        raw.demoPanelOrder, demoFavorites, demoRoomReadings),
       groupByArea: raw.groupByArea === true,
       showEntityIcons: raw.showEntityIcons !== false,
       selectedTab: typeof raw.selectedTab === "string" && raw.selectedTab

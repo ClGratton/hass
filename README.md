@@ -89,6 +89,12 @@ your profile → Security), or flip on **Demo mode** to try the panel against a
 built-in fake house with no instance at all. Then switch to **Devices** and
 star the ones you want in the panel.
 
+The **Room readings** category groups environmental sensors that belong to the
+same physical Home Assistant device. Star one device there to add a compact
+card for temperature, humidity, particulate matter, VOC, carbon dioxide and
+other available readings. Individual sensor entities remain available in the
+other categories and can still be starred separately.
+
 Optionally, turn on **Local network URL** to add your instance's LAN address.
 It's the same Home Assistant instance reached by a different address, so it
 reuses the one access token above rather than needing its own. It also asks

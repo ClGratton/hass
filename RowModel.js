@@ -23,6 +23,9 @@ function project(entityId, entity, context, model) {
     reserveExpandSlot: caps.reserveExpandSlot,
     available: caps.available,
     areaId: areaId,
-    areaName: (context.areaNames || {})[areaId] || ""
+    areaName: (context.areaNames || {})[areaId] || "",
+    rowKind: "entity",
+    roomDeviceId: "",
+    controlEntityId: ""
   }
 }

@@ -633,11 +633,11 @@ Item {
       // A known entity's state is replaced in place, so `states` identity does
       // not change on the hot path; stateRevision is what fires these.
       readonly property var favorites: root.service
-        ? (root.shownRevision, root.service.favorites,
+        ? (root.shownRevision, root.service.favorites, root.service.roomReadings,
            root.service.favoriteSummaries())
         : []
       readonly property var results: root.service
-        ? (root.shownRevision, root.service.favorites,
+        ? (root.shownRevision, root.service.favorites, root.service.roomReadings,
            root.service.browseEntities(root.appliedQuery, root.domainFilter))
         : []
 
@@ -743,9 +743,11 @@ Item {
               entityId: modelData.entityId
               name: modelData.name
               icon: modelData.icon
-              detail: modelData.entityId
+              detail: root.domainFilter === "room_readings"
+                ? modelData.detail : modelData.entityId
               favorite: modelData.favorite
               reorderable: false
+              roomReading: root.domainFilter === "room_readings"
               service: root.service
               family: root.family
             }
@@ -805,6 +807,8 @@ Item {
               detail: modelData.available ? modelData.state : "Unavailable"
               favorite: true
               reorderable: true
+              roomReading: modelData.roomReading
+              panelItemId: modelData.panelItemId
               service: root.service
               family: root.family
             }

@@ -13,6 +13,8 @@ CursorSurface {
   required property string detail
   required property bool favorite
   required property bool reorderable
+  property bool roomReading: false
+  property string panelItemId: entityId
   property var service: null
   property string family: Style.font.menuFamily
 
@@ -89,7 +91,7 @@ CursorSurface {
         tooltipText: "Move up"
         foreground: Color.muted
         fontFamily: row.family
-        onClicked: if (row.service) row.service.moveFavorite(row.entityId, -1)
+        onClicked: if (row.service) row.service.movePanelItem(row.panelItemId, -1)
       }
 
       PanelActionButton {
@@ -99,7 +101,7 @@ CursorSurface {
         tooltipText: "Move down"
         foreground: Color.muted
         fontFamily: row.family
-        onClicked: if (row.service) row.service.moveFavorite(row.entityId, 1)
+        onClicked: if (row.service) row.service.movePanelItem(row.panelItemId, 1)
       }
 
       PanelActionButton {
@@ -107,10 +109,15 @@ CursorSurface {
         // A filled star for a favorite, an outline for everything else, so
         // the state is legible without relying on colour alone.
         iconText: row.favorite ? "󰓎" : "󰓒"   // md-star / md-star_outline
-        tooltipText: row.favorite ? "Remove from panel" : "Add to panel"
+        tooltipText: row.roomReading
+          ? (row.favorite ? "Remove room-reading card" : "Add room-reading card")
+          : (row.favorite ? "Remove from panel" : "Add to panel")
         foreground: row.favorite ? Color.foreground : Color.muted
         fontFamily: row.family
-        onClicked: if (row.service) row.service.toggleFavorite(row.entityId)
+        onClicked: if (row.service) {
+          if (row.roomReading) row.service.toggleRoomReading(row.entityId)
+          else row.service.toggleFavorite(row.entityId)
+        }
       }
     }
   }

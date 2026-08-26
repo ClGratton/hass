@@ -43,6 +43,10 @@ eq("typed values are normalized", parsed.config, {
   demoMode: true,
   favorites: ["light.a"],
   demoFavorites: [],
+  roomReadings: [],
+  demoRoomReadings: [],
+  panelOrder: ["light.a"],
+  demoPanelOrder: [],
   groupByArea: false,
   showEntityIcons: false,
   selectedTab: "area:kitchen",
@@ -58,6 +62,23 @@ const withLocal = Config.parse(JSON.stringify({
 eq("a non-string localUrl falls back to empty", withLocal.config.localUrl, "");
 eq("a non-string trustedNetwork falls back to empty",
    withLocal.config.trustedNetwork, "");
+
+const withRooms = Config.parse(JSON.stringify({
+  favorites: ["light.desk"],
+  roomReadings: ["abc123", "abc123", "device.room", "bad value", "__proto__"],
+  demoRoomReadings: ["device.demo"],
+  panelOrder: ["room_reading:abc123", "light.desk", "room_reading:missing"],
+  demoPanelOrder: ["room_reading:device.demo", "bad value"]
+}), []);
+eq("room-reading device ids are normalized independently from entity ids",
+   withRooms.config.roomReadings, ["abc123", "device.room"]);
+eq("demo room readings use their own namespace",
+   withRooms.config.demoRoomReadings, ["device.demo"]);
+eq("one panel order interleaves entities and room-reading cards",
+   withRooms.config.panelOrder, ["room_reading:abc123", "light.desk",
+                                 "room_reading:device.room"]);
+eq("demo panel order is independent",
+   withRooms.config.demoPanelOrder, ["room_reading:device.demo"]);
 
 const merged = Config.merge(parsed.config, {
   groupByArea: true,

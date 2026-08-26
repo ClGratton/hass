@@ -121,6 +121,78 @@ function badgeText(entity) {
   return displayState(entity)
 }
 
+// ---------------------------------------------------------------- room readings
+
+function environmentalKind(entity) {
+  if (domain(entity) !== "sensor" && domain(entity) !== "binary_sensor") return ""
+  var a = attrs(entity)
+  var deviceClass = cleaned(a.device_class).toLowerCase()
+  var haystack = (deviceClass + " " + name(entity) + " "
+    + String(entity ? entity.entity_id : "")).toLowerCase()
+
+  if (haystack.indexOf("pm2.5") !== -1 || haystack.indexOf("pm2_5") !== -1
+      || haystack.indexOf("pm25") !== -1) return "pm25"
+  if (deviceClass === "pm1" || /(?:^|[ _.])pm1(?:$|[ _.])/.test(haystack)) return "pm1"
+  if (deviceClass === "pm10" || /(?:^|[ _.])pm10(?:$|[ _.])/.test(haystack)) return "pm10"
+  if (haystack.indexOf("voc") !== -1 && haystack.indexOf("index") !== -1) return "voc_index"
+  if (deviceClass === "volatile_organic_compounds"
+      || deviceClass === "volatile_organic_compounds_parts"
+      || haystack.indexOf("volatile organic") !== -1
+      || /(?:^|[ _.])voc(?:$|[ _.])/.test(haystack)) return "voc"
+  if (deviceClass === "carbon_dioxide" || haystack.indexOf("co2") !== -1) return "co2"
+  if (deviceClass === "carbon_monoxide" || haystack.indexOf("carbon monoxide") !== -1) return "co"
+  if (deviceClass === "temperature" || haystack.indexOf("temperature") !== -1) return "temperature"
+  if (deviceClass === "humidity" || haystack.indexOf("humidity") !== -1) return "humidity"
+  if (deviceClass === "air_quality_index" || haystack.indexOf("air quality") !== -1) return "aqi"
+  if (deviceClass === "atmospheric_pressure" || haystack.indexOf("pressure") !== -1) return "pressure"
+  if (deviceClass === "illuminance" || haystack.indexOf("illuminance") !== -1) return "illuminance"
+  return ""
+}
+
+var ENVIRONMENTAL_LABELS = {
+  temperature: "Temperature", humidity: "Humidity", pm1: "PM1",
+  pm25: "PM2.5", pm10: "PM10", voc: "VOC", voc_index: "VOC index",
+  co2: "CO₂", co: "CO", aqi: "Air quality", pressure: "Pressure",
+  illuminance: "Light"
+}
+
+var ENVIRONMENTAL_ORDER = {
+  temperature: 10, humidity: 20, co2: 30, voc: 40, voc_index: 40,
+  pm1: 50, pm25: 60, pm10: 70, aqi: 80, pressure: 90, illuminance: 100
+}
+
+function environmentalQuality(kind, state) {
+  var value = Number(state)
+  if (!isFinite(value)) return "unknown"
+  var bands = null
+  if (kind === "pm25") bands = [5, 15, 35]
+  else if (kind === "pm10") bands = [15, 45, 75]
+  else if (kind === "voc_index") bands = [100, 200, 300]
+  else if (kind === "voc") bands = [220, 660, 2200]
+  else if (kind === "co2") bands = [800, 1200, 2000]
+  else if (kind === "co") bands = [4, 9, 35]
+  else if (kind === "aqi") bands = [50, 100, 150]
+  if (!bands) return "neutral"
+  if (value <= bands[0]) return "good"
+  if (value <= bands[1]) return "moderate"
+  if (value <= bands[2]) return "poor"
+  return "critical"
+}
+
+function environmentalReading(entity) {
+  var kind = environmentalKind(entity)
+  if (!kind) return null
+  return {
+    entityId: String(entity.entity_id || ""),
+    kind: kind,
+    label: ENVIRONMENTAL_LABELS[kind] || name(entity),
+    value: displayState(entity),
+    quality: isUnavailable(entity) ? "unknown"
+      : environmentalQuality(kind, stateOf(entity)),
+    order: ENVIRONMENTAL_ORDER[kind] || 999
+  }
+}
+
 function mediaSubtitle(entity) {
   var a = attrs(entity)
   var title = cleaned(a.media_title)
@@ -1087,6 +1159,7 @@ function activitySummary(entities) {
 // Settings browser buckets. No "Cameras" until cameras ship.
 var DOMAIN_FILTERS = [
   { id: "all", title: "All", domains: [] },
+  { id: "room_readings", title: "Room readings", domains: [] },
   { id: "lights", title: "Lights", domains: ["light"] },
   { id: "controls", title: "Controls",
     domains: ["switch", "fan", "input_boolean", "humidifier", "lock", "scene", "script"] },

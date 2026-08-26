@@ -13,6 +13,16 @@ function safeKey(value) {
     && value !== "__proto__" && value !== "constructor" && value !== "prototype"
 }
 
+function cleaned(value) {
+  return typeof value === "string" ? value.trim() : ""
+}
+
+function deviceName(device) {
+  if (!device || typeof device !== "object") return ""
+  return cleaned(device.name_by_user) || cleaned(device.name)
+    || cleaned(device.model)
+}
+
 function indexStates(entities) {
   var next = {}
   if (!Array.isArray(entities)) return next
@@ -69,15 +79,18 @@ function projectRegistries(areas, entities, devices) {
   }
 
   var deviceArea = {}
+  var deviceNames = {}
   var deviceList = Array.isArray(devices) ? devices : []
   for (var d = 0; d < deviceList.length; d++) {
     var device = deviceList[d]
     if (device && safeKey(device.id)) {
       deviceArea[device.id] = safeKey(device.area_id) ? device.area_id : ""
+      deviceNames[device.id] = deviceName(device)
     }
   }
 
   var mapping = {}
+  var deviceEntities = {}
   // Home Assistant keeps per-light favourite colours in the registry entry's
   // options, not on the entity state, so they are picked up here rather than
   // from the state snapshot. Kept raw: Model validates each entry against the
@@ -92,6 +105,12 @@ function projectRegistries(areas, entities, devices) {
     var areaId = ownArea || inheritedArea || ""
     if (areaId) mapping[entry.entity_id] = areaId
 
+    var deviceId = safeKey(entry.device_id) ? entry.device_id : ""
+    if (deviceId) {
+      if (!deviceEntities[deviceId]) deviceEntities[deviceId] = []
+      deviceEntities[deviceId].push(entry.entity_id)
+    }
+
     var options = entry.options
     var lightOptions = options && typeof options === "object"
       ? options.light : null
@@ -101,7 +120,14 @@ function projectRegistries(areas, entities, devices) {
       favorites[entry.entity_id] = saved
     }
   }
-  return { areaNames: names, entityArea: mapping, favoriteColors: favorites }
+  return {
+    areaNames: names,
+    entityArea: mapping,
+    favoriteColors: favorites,
+    deviceNames: deviceNames,
+    deviceArea: deviceArea,
+    deviceEntities: deviceEntities
+  }
 }
 
 function sortedIds(states, displayName) {
