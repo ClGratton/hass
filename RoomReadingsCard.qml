@@ -11,6 +11,9 @@ Item {
   required property var hass
   required property string deviceId
   property QtObject bar: null
+  property bool expanded: false
+
+  signal expansionRequested()
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
@@ -21,7 +24,8 @@ Item {
   }
 
   width: parent ? parent.width : 0
-  implicitHeight: header.implicitHeight + Style.spacing.lg + metrics.implicitHeight
+  implicitHeight: header.implicitHeight
+    + (expanded ? Style.spacing.lg + metrics.implicitHeight : 0)
 
   Item {
     id: header
@@ -29,7 +33,7 @@ Item {
     height: implicitHeight
     anchors.top: parent.top
     implicitHeight: Math.max(glyph.implicitHeight, headerLabels.height,
-                             primaryControl.implicitHeight)
+                             headerControls.implicitHeight)
 
     Text {
       textFormat: Text.PlainText
@@ -46,7 +50,7 @@ Item {
       id: headerLabels
       anchors.left: glyph.right
       anchors.leftMargin: Style.spacing.xl
-      anchors.right: primaryControl.left
+      anchors.right: headerControls.left
       anchors.rightMargin: Style.spacing.lg
       anchors.verticalCenter: parent.verticalCenter
       height: name.implicitHeight
@@ -68,8 +72,8 @@ Item {
         textFormat: Text.PlainText
         id: areaName
         width: parent.width
-        visible: card.cardData.areaName.length > 0
-        text: card.cardData.areaName
+        visible: card.cardData.summary.length > 0
+        text: card.cardData.summary
         color: card.dim
         font.family: card.family
         font.pixelSize: Style.font.caption
@@ -77,18 +81,33 @@ Item {
       }
     }
 
-    ToggleSwitch {
-      id: primaryControl
+    Row {
+      id: headerControls
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      visible: card.cardData.controlEntityId.length > 0
-      checked: card.cardData.controlOn
-      busy: card.cardData.controlPending
-      interactive: true
-      cursorRing: false
-      foreground: card.fg
-      onToggled: if (card.cardData.controlEntityId) {
-        card.hass.toggleEntity(card.cardData.controlEntityId)
+      spacing: Style.spacing.md
+
+      ToggleSwitch {
+        id: primaryControl
+        anchors.verticalCenter: parent.verticalCenter
+        visible: card.cardData.controlEntityId.length > 0
+        checked: card.cardData.controlOn
+        busy: card.cardData.controlPending
+        interactive: true
+        cursorRing: false
+        foreground: card.fg
+        onToggled: if (card.cardData.controlEntityId) {
+          card.hass.toggleEntity(card.cardData.controlEntityId)
+        }
+      }
+
+      PanelActionButton {
+        anchors.verticalCenter: parent.verticalCenter
+        iconText: card.expanded ? "󰅃" : "󰅀"
+        tooltipText: card.expanded ? "Collapse readings" : "Show readings"
+        foreground: card.dim
+        fontFamily: card.family
+        onClicked: card.expansionRequested()
       }
     }
   }
@@ -99,6 +118,7 @@ Item {
     height: implicitHeight
     anchors.top: header.bottom
     anchors.topMargin: Style.spacing.lg
+    visible: card.expanded
     columns: 2
     columnSpacing: Style.spacing.sm
     rowSpacing: Style.spacing.sm

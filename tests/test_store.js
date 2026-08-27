@@ -59,9 +59,11 @@ eq("area names are projected", registries.areaNames, { k: "Kitchen", h: "Hall" }
 eq("entity area wins over its device",
    registries.entityArea, { "light.a": "k", "sensor.b": "h" });
 eq("device names and entity membership are projected",
-   [registries.deviceNames, registries.deviceEntities],
+   [registries.deviceNames, registries.deviceEntities, registries.entityRegistry],
    [{ d1: "Lamp", d2: "Bedroom air" },
-    { d1: ["light.a"], d2: ["sensor.b"] }]);
+    { d1: ["light.a"], d2: ["sensor.b"] },
+    { "light.a": { entityCategory: "", name: "", originalName: "" },
+      "sensor.b": { entityCategory: "", name: "", originalName: "" } }]);
 
 // Favourite colours ride along in the registry entry's options, which is the
 // only place Home Assistant publishes them — they are not on the entity state.

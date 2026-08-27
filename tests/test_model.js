@@ -141,6 +141,50 @@ section("room-reading classification", () => {
      Model.environmentalReading(entity("sensor.air_battery", "100", {
        device_class: "battery"
      })), null);
+  eq("a shared device name cannot turn a battery into temperature",
+     Model.environmentalReading(entity("sensor.temperature_kids_battery", "96", {
+       friendly_name: "Temperature Kids Battery", device_class: "battery",
+       unit_of_measurement: "%"
+     })), null);
+  eq("device class wins over a misleading shared name",
+     Model.environmentalReading(entity("sensor.temperature_kids_humidity", "50", {
+       friendly_name: "Temperature Kids Humidity", device_class: "humidity",
+       unit_of_measurement: "%"
+     })).kind, "humidity");
+  eq("temperature can fall back to its unit without a class",
+     Model.environmentalReading(entity("sensor.room_probe", "22", {
+       friendly_name: "Room probe", unit_of_measurement: "°C"
+     })).kind, "temperature");
+
+  const primary = entity("switch.ikea_air_monitor", "on", {
+    friendly_name: "Ikea Air Monitor"
+  });
+  eq("a switch named for its device is a safe primary control",
+     Model.isSafePrimaryControl(primary, "Ikea Air Monitor", {}), true);
+  eq("a configuration entity cannot become the primary control",
+     Model.isSafePrimaryControl(primary, "Ikea Air Monitor",
+       { entityCategory: "config" }), false);
+  eq("identify is never selected as a primary control",
+     Model.isSafePrimaryControl(entity("switch.ikea_air_monitor_identify", "off", {
+       friendly_name: "Ikea Air Monitor Identify"
+     }), "Ikea Air Monitor", {}), false);
+  eq("an unrelated auxiliary switch is not selected",
+     Model.isSafePrimaryControl(entity("switch.child_lock", "off", {
+       friendly_name: "Child lock"
+     }), "Air purifier", {}), false);
+  eq("a unique fan is eligible as an explicit device control",
+     Model.isSafePrimaryControl(entity("fan.purifier", "on", {
+       friendly_name: "Purifier fan"
+     }), "Air purifier", {}), true);
+
+  eq("room summary keeps the first readings compact",
+     Model.roomReadingSummary([
+       { kind: "temperature", label: "Temperature", value: "24.7 °C" },
+       { kind: "humidity", label: "Humidity", value: "46.9 %" },
+       { kind: "co2", label: "CO₂", value: "407 ppm" },
+       { kind: "voc", label: "VOC", value: "12 ppb" },
+       { kind: "pm25", label: "PM2.5", value: "4 µg/m³" }
+     ], 3), "24.7 °C · 46.9 % · CO₂ 407 ppm · +2");
 });
 
 section("brightness", () => {

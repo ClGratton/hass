@@ -52,6 +52,7 @@ QtObject {
   property var deviceNames: ({})
   property var deviceArea: ({})
   property var deviceEntities: ({})
+  property var entityRegistry: ({})
 
   // Disjoint namespaces: one shared list would show ghosts after a mode switch.
   property var liveFavorites: []
@@ -404,6 +405,7 @@ QtObject {
     root.deviceNames = ({})
     root.deviceArea = ({})
     root.deviceEntities = ({})
+    root.entityRegistry = ({})
     root.temperatureUnit = ""
     root.pendingToggles = ({})
     pendingSweep.running = false
@@ -937,6 +939,7 @@ QtObject {
     root.deviceNames = projection.deviceNames
     root.deviceArea = projection.deviceArea
     root.deviceEntities = projection.deviceEntities
+    root.entityRegistry = projection.entityRegistry
     root.rebuildRows()
   }
 
@@ -1011,10 +1014,16 @@ QtObject {
 
   function primaryControlForDevice(deviceId) {
     var entityIds = root.liveEntitiesForDevice(deviceId)
+    var deviceName = root.deviceDisplayName(deviceId, entityIds)
+    var candidates = []
     for (var i = 0; i < entityIds.length; i++) {
-      if (Model.capabilitiesFor(root.states[entityIds[i]]).toggle) return entityIds[i]
+      var entityId = entityIds[i]
+      if (Model.isSafePrimaryControl(
+          root.states[entityId], deviceName, root.entityRegistry[entityId])) {
+        candidates.push(entityId)
+      }
     }
-    return ""
+    return candidates.length === 1 ? candidates[0] : ""
   }
 
   function roomReadingCard(deviceId) {
@@ -1036,6 +1045,7 @@ QtObject {
       areaId: areaId,
       areaName: areaId ? root.areaNames[areaId] || "" : "",
       readings: readings,
+      summary: Model.roomReadingSummary(readings, 3),
       controlEntityId: controlEntityId,
       controlOn: controlEntityId ? root.displayIsOn(controlEntityId) : false,
       controlPending: controlEntityId
@@ -1110,15 +1120,30 @@ QtObject {
     return false
   }
 
-  readonly property string activitySummary: {
+  function activityEntities() {
     root.stateRevision
     var picked = []
+    var seen = {}
     for (var i = 0; i < root.favorites.length; i++) {
-      var entity = root.states[String(root.favorites[i])]
-      if (entity) picked.push(entity)
+      var favoriteId = String(root.favorites[i])
+      var entity = root.states[favoriteId]
+      if (entity) {
+        picked.push(entity)
+        seen[favoriteId] = true
+      }
     }
-    return Model.activitySummary(picked)
+    for (var roomIndex = 0; roomIndex < root.roomReadings.length; roomIndex++) {
+      var controlId = root.primaryControlForDevice(root.roomReadings[roomIndex])
+      if (controlId && !seen[controlId] && root.states[controlId]) {
+        picked.push(root.states[controlId])
+        seen[controlId] = true
+      }
+    }
+    return picked
   }
+
+  readonly property string activitySummary: Model.activitySummary(
+    root.activityEntities())
 
   function displayName(entityId) {
     var override = root.displayNameOverrides[entityId]
@@ -1149,8 +1174,8 @@ QtObject {
         isOn: card.controlOn,
         pending: card.controlPending,
         control: card.controlEntityId ? "toggle" : "none",
-        expandable: false,
-        reserveExpandSlot: false,
+        expandable: true,
+        reserveExpandSlot: true,
         available: card.available,
         areaId: card.areaId,
         areaName: card.areaName,

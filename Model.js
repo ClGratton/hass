@@ -127,25 +127,36 @@ function environmentalKind(entity) {
   if (domain(entity) !== "sensor" && domain(entity) !== "binary_sensor") return ""
   var a = attrs(entity)
   var deviceClass = cleaned(a.device_class).toLowerCase()
-  var haystack = (deviceClass + " " + name(entity) + " "
-    + String(entity ? entity.entity_id : "")).toLowerCase()
+  var byClass = {
+    temperature: "temperature", humidity: "humidity", pm1: "pm1",
+    pm25: "pm25", pm10: "pm10",
+    volatile_organic_compounds: "voc",
+    volatile_organic_compounds_parts: "voc",
+    carbon_dioxide: "co2", carbon_monoxide: "co",
+    air_quality_index: "aqi", atmospheric_pressure: "pressure",
+    illuminance: "illuminance"
+  }
+  if (byClass[deviceClass]) return byClass[deviceClass]
+  if (deviceClass) return ""
 
+  var unit = cleaned(a.unit_of_measurement).toLowerCase().replace(/\s+/g, "")
+  var haystack = (name(entity) + " "
+    + String(entity ? entity.entity_id : "")).toLowerCase()
+  if (unit === "°c" || unit === "°f" || unit === "k") return "temperature"
+  if (unit === "%") return "humidity"
+  if (unit === "lx") return "illuminance"
+  if (/^(pa|hpa|kpa|mbar|bar|inhg|mmhg)$/.test(unit)) return "pressure"
   if (haystack.indexOf("pm2.5") !== -1 || haystack.indexOf("pm2_5") !== -1
-      || haystack.indexOf("pm25") !== -1) return "pm25"
-  if (deviceClass === "pm1" || /(?:^|[ _.])pm1(?:$|[ _.])/.test(haystack)) return "pm1"
-  if (deviceClass === "pm10" || /(?:^|[ _.])pm10(?:$|[ _.])/.test(haystack)) return "pm10"
-  if (haystack.indexOf("voc") !== -1 && haystack.indexOf("index") !== -1) return "voc_index"
-  if (deviceClass === "volatile_organic_compounds"
-      || deviceClass === "volatile_organic_compounds_parts"
-      || haystack.indexOf("volatile organic") !== -1
+      || /(?:^|[ _.])pm25(?:$|[ _.])/.test(haystack)) return "pm25"
+  if (/(?:^|[ _.])pm1(?:$|[ _.])/.test(haystack)) return "pm1"
+  if (/(?:^|[ _.])pm10(?:$|[ _.])/.test(haystack)) return "pm10"
+  if (/(?:^|[ _.])voc(?:$|[ _.])/.test(haystack)
+      && haystack.indexOf("index") !== -1) return "voc_index"
+  if (haystack.indexOf("volatile organic") !== -1
       || /(?:^|[ _.])voc(?:$|[ _.])/.test(haystack)) return "voc"
-  if (deviceClass === "carbon_dioxide" || haystack.indexOf("co2") !== -1) return "co2"
-  if (deviceClass === "carbon_monoxide" || haystack.indexOf("carbon monoxide") !== -1) return "co"
-  if (deviceClass === "temperature" || haystack.indexOf("temperature") !== -1) return "temperature"
-  if (deviceClass === "humidity" || haystack.indexOf("humidity") !== -1) return "humidity"
-  if (deviceClass === "air_quality_index" || haystack.indexOf("air quality") !== -1) return "aqi"
-  if (deviceClass === "atmospheric_pressure" || haystack.indexOf("pressure") !== -1) return "pressure"
-  if (deviceClass === "illuminance" || haystack.indexOf("illuminance") !== -1) return "illuminance"
+  if (/(?:^|[ _.])co2(?:$|[ _.])/.test(haystack)) return "co2"
+  if (haystack.indexOf("carbon monoxide") !== -1) return "co"
+  if (haystack.indexOf("air quality") !== -1) return "aqi"
   return ""
 }
 
@@ -191,6 +202,47 @@ function environmentalReading(entity) {
       : environmentalQuality(kind, stateOf(entity)),
     order: ENVIRONMENTAL_ORDER[kind] || 999
   }
+}
+
+function normalizedControlName(value) {
+  return cleaned(value).toLowerCase().replace(/[^a-z0-9]+/g, "")
+}
+
+function isSafePrimaryControl(entity, deviceName, registryEntry) {
+  if (!entity || !capabilitiesFor(entity).toggle) return false
+  var entry = registryEntry && typeof registryEntry === "object"
+    ? registryEntry : {}
+  if (cleaned(entry.entityCategory)) return false
+  var controlName = (name(entity) + " " + String(entity.entity_id || "") + " "
+    + cleaned(entry.name) + " " + cleaned(entry.originalName)).toLowerCase()
+  if (/(child.?lock|identify|indicator|led|display|reset|calibrat|mute|alarm)/
+      .test(controlName)) return false
+  var dom = domain(entity)
+  if (dom === "light" || dom === "fan" || dom === "climate"
+      || dom === "humidifier") return true
+  if (dom !== "switch" && dom !== "input_boolean") return false
+  var deviceKey = normalizedControlName(deviceName)
+  if (!deviceKey) return false
+  var objectId = String(entity.entity_id || "").split(".").slice(1).join(".")
+  return normalizedControlName(name(entity)) === deviceKey
+    || normalizedControlName(objectId) === deviceKey
+    || normalizedControlName(entry.name) === deviceKey
+    || normalizedControlName(entry.originalName) === deviceKey
+}
+
+function roomReadingSummary(readings, limit) {
+  var values = Array.isArray(readings) ? readings : []
+  var cap = typeof limit === "number" && limit > 0 ? Math.floor(limit) : 3
+  var parts = []
+  for (var i = 0; i < values.length && parts.length < cap; i++) {
+    var reading = values[i] || {}
+    var value = cleaned(reading.value)
+    if (!value) continue
+    parts.push(reading.kind === "temperature" || reading.kind === "humidity"
+      ? value : cleaned(reading.label) + " " + value)
+  }
+  if (values.length > parts.length) parts.push("+" + (values.length - parts.length))
+  return parts.join(" · ")
 }
 
 function mediaSubtitle(entity) {

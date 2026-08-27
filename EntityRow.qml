@@ -245,6 +245,8 @@ CursorSurface {
           hass: row.hass
           deviceId: row.roomDeviceId
           bar: row.bar
+          expanded: row.expanded
+          onExpansionRequested: row.expandToggled()
         }
       }
     }

@@ -91,6 +91,7 @@ function projectRegistries(areas, entities, devices) {
 
   var mapping = {}
   var deviceEntities = {}
+  var entityRegistry = {}
   // Home Assistant keeps per-light favourite colours in the registry entry's
   // options, not on the entity state, so they are picked up here rather than
   // from the state snapshot. Kept raw: Model validates each entry against the
@@ -100,6 +101,11 @@ function projectRegistries(areas, entities, devices) {
   for (var e = 0; e < entityList.length; e++) {
     var entry = entityList[e]
     if (!entry || !validEntityId(entry.entity_id)) continue
+    entityRegistry[entry.entity_id] = {
+      entityCategory: cleaned(entry.entity_category),
+      name: cleaned(entry.name),
+      originalName: cleaned(entry.original_name)
+    }
     var ownArea = safeKey(entry.area_id) ? entry.area_id : ""
     var inheritedArea = safeKey(entry.device_id) ? deviceArea[entry.device_id] : ""
     var areaId = ownArea || inheritedArea || ""
@@ -126,7 +132,8 @@ function projectRegistries(areas, entities, devices) {
     favoriteColors: favorites,
     deviceNames: deviceNames,
     deviceArea: deviceArea,
-    deviceEntities: deviceEntities
+    deviceEntities: deviceEntities,
+    entityRegistry: entityRegistry
   }
 }
 

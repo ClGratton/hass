@@ -145,6 +145,10 @@ def main():
     check("toggle rollback still runs through the pending toggle map",
           '"toggle:" + entityId' in function_block("toggleEntity")
           and "clearPendingToggle" in function_block("handleResult"))
+    check("room controls are selected explicitly and included in activity",
+          "Model.isSafePrimaryControl" in function_block("primaryControlForDevice")
+          and "candidates.length === 1" in function_block("primaryControlForDevice")
+          and "root.roomReadings.length" in function_block("activityEntities"))
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)
