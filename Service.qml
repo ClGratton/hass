@@ -578,6 +578,7 @@ QtObject {
     for (var i = 0; i < expired.length; i++) {
       delete root.pendingToggles[expired[i]]
       root.refreshRow(expired[i])
+      root.refreshRoomReadingForEntity(expired[i])
       root.lastError = "No response from Home Assistant."
     }
     if (!root.hasPendingToggles()) pendingSweep.running = false
