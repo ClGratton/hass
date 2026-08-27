@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Ui
 import qs.Commons
+import ".."
 import "../Model.js" as Model
 
 // Recorder history for a numeric sensor. The chips pick 1h / 3h / 6h / 12h / 1d;
@@ -13,7 +14,7 @@ Item {
   property var entity: null
   property QtObject bar: null
   property int selectorCursorIndex: -1
-  property int hoverIndex: -1
+  property real hoverTime: -1
   property real axisNow: Date.now() / 1000
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
@@ -46,22 +47,19 @@ Item {
     ? Model.cleaned(Model.attrs(entity).unit_of_measurement) : ""
   readonly property int plotRevision: hass ? hass.historyRevision : 0
   readonly property var hoverPoint: {
-    if (hoverIndex < 0 || hoverIndex >= points.length) return null
-    return points[hoverIndex]
+    return historyPlot.hoveredPoint
   }
   readonly property real snapshotAxisEnd: snapshot && snapshot.axisEnd
     ? Number(snapshot.axisEnd) : Date.now() / 1000
 
   onHoursChanged: {
-    control.hoverIndex = -1
+    control.hoverTime = -1
     control.axisNow = Date.now() / 1000
     control.reload()
   }
   onPlotRevisionChanged: {
     control.axisNow = control.snapshotAxisEnd
-    chart.requestPaint()
   }
-  onHoverIndexChanged: chart.requestPaint()
   Component.onCompleted: control.reload()
   Component.onDestruction: {
     if (control.hass) control.hass.clearHistory(control.entityId)
@@ -80,6 +78,7 @@ Item {
   }
 
   function formatValue(value) {
+    if (value === null) return "Unavailable"
     if (typeof value !== "number" || !isFinite(value)) return ""
     var text = Math.abs(value) >= 100 || Math.abs(value - Math.round(value)) < 0.05
       ? String(Math.round(value))
@@ -94,110 +93,14 @@ Item {
     return ""
   }
 
-  function plotFrame() {
-    var samples = control.points
-    if (!samples || samples.length === 0 || chart.width < 8 || chart.height < 8)
-      return null
-
-    var maxT = control.axisNow
-    var minT = maxT - control.hours * 3600
-    if (!(maxT > minT)) maxT = minT + 1
-
-    // Scale Y from values that actually appear in the visible window, including
-    // the held value from the last sample before minT (step-chart semantics).
-    var minV = 0
-    var maxV = 0
-    var have = false
-    var hold = null
-    for (var i = 0; i < samples.length; i++) {
-      var sample = samples[i]
-      if (sample.t < minT) {
-        hold = sample.v
-        continue
-      }
-      if (!have) {
-        if (hold !== null) {
-          minV = hold
-          maxV = hold
-          have = true
-        }
-      }
-      if (!have) {
-        minV = sample.v
-        maxV = sample.v
-        have = true
-      } else {
-        if (sample.v < minV) minV = sample.v
-        if (sample.v > maxV) maxV = sample.v
-      }
+  function visibleExtreme(maximum) {
+    var result = null
+    for (var i = 0; i < control.points.length; i++) {
+      var value = control.points[i].v
+      if (value === null) continue
+      if (result === null || (maximum ? value > result : value < result)) result = value
     }
-    if (!have && hold !== null) {
-      minV = hold
-      maxV = hold
-      have = true
-    }
-    if (!have) {
-      minV = samples[0].v
-      maxV = samples[0].v
-      for (var j = 1; j < samples.length; j++) {
-        if (samples[j].v < minV) minV = samples[j].v
-        if (samples[j].v > maxV) maxV = samples[j].v
-      }
-    }
-    if (minV === maxV) {
-      minV -= 1
-      maxV += 1
-    }
-    var pad = (maxV - minV) * 0.08
-    minV -= pad
-    maxV += pad
-
-    var left = Style.space(4)
-    var right = chart.width - Style.space(4)
-    var top = Style.space(6)
-    var bottom = chart.height - Style.space(6)
-    var spanX = right - left
-    var spanY = bottom - top
-    if (spanX <= 0 || spanY <= 0) return null
-    return {
-      samples: samples, minV: minV, maxV: maxV, minT: minT, maxT: maxT,
-      left: left, right: right, top: top, bottom: bottom,
-      spanX: spanX, spanY: spanY
-    }
-  }
-
-  function strokeStepPath(ctx, frame) {
-    var samples = frame.samples
-    // Carry the earliest known value back to the window start so sparse
-    // sensors still fill the chart (same idea as HA's start-of-period state).
-    var startV = samples[0].v
-    var index = 0
-    while (index < samples.length && samples[index].t <= frame.minT) {
-      startV = samples[index].v
-      index++
-    }
-    ctx.moveTo(control.xAt(frame, frame.minT), control.yAt(frame, startV))
-    var prevV = startV
-    if (index === 0) {
-      ctx.lineTo(control.xAt(frame, samples[0].t), control.yAt(frame, samples[0].v))
-      prevV = samples[0].v
-      index = 1
-    }
-    for (; index < samples.length; index++) {
-      var next = samples[index]
-      ctx.lineTo(control.xAt(frame, next.t), control.yAt(frame, prevV))
-      ctx.lineTo(control.xAt(frame, next.t), control.yAt(frame, next.v))
-      prevV = next.v
-    }
-    ctx.lineTo(control.xAt(frame, frame.maxT), control.yAt(frame, prevV))
-  }
-
-  function xAt(frame, t) {
-    return frame.left + ((t - frame.minT) / (frame.maxT - frame.minT)) * frame.spanX
-  }
-
-  function yAt(frame, v) {
-    return frame.top + ((frame.maxV - v) / (frame.maxV - frame.minV)) * frame.spanY
+    return result
   }
 
   implicitHeight: column.implicitHeight
@@ -260,58 +163,27 @@ Item {
       width: parent.width
       implicitHeight: Style.space(120)
 
-      Canvas {
-        id: chart
+      HistoryPlot {
+        id: historyPlot
         anchors.fill: parent
         visible: control.points.length > 0
-        onWidthChanged: requestPaint()
-        onHeightChanged: requestPaint()
-        onPaint: {
-          var ctx = getContext("2d")
-          ctx.reset()
-          var frame = control.plotFrame()
-          if (!frame) return
-          var samples = frame.samples
-
-          ctx.beginPath()
-          control.strokeStepPath(ctx, frame)
-          ctx.lineTo(control.xAt(frame, frame.maxT), frame.bottom)
-          ctx.lineTo(control.xAt(frame, frame.minT), frame.bottom)
-          ctx.closePath()
-          ctx.fillStyle = Qt.rgba(control.fg.r, control.fg.g, control.fg.b, 0.16)
-          ctx.fill()
-
-          ctx.beginPath()
-          control.strokeStepPath(ctx, frame)
-          ctx.strokeStyle = control.fg
-          ctx.lineWidth = Math.max(1.5, Style.space(2))
-          ctx.stroke()
-
-          if (control.hoverIndex < 0 || control.hoverIndex >= samples.length) return
-          var point = samples[control.hoverIndex]
-          var hx = control.xAt(frame, point.t)
-          var hy = control.yAt(frame, point.v)
-          ctx.beginPath()
-          ctx.moveTo(hx, frame.top)
-          ctx.lineTo(hx, frame.bottom)
-          ctx.strokeStyle = Qt.rgba(control.fg.r, control.fg.g, control.fg.b, 0.45)
-          ctx.lineWidth = 1
-          ctx.stroke()
-          var radius = Math.max(3, Style.space(4))
-          ctx.beginPath()
-          ctx.arc(hx, hy, radius, 0, Math.PI * 2)
-          ctx.fillStyle = control.fg
-          ctx.fill()
-        }
+        points: control.points
+        foreground: control.fg
+        accent: control.fg
+        fontFamily: control.family
+        includeZero: String(Model.attrs(control.entity).device_class || "") === "power"
+        axisStart: control.axisNow - control.hours * 3600
+        axisEnd: control.axisNow
+        hoverTime: control.hoverTime
+        showCursor: true
       }
 
       Timer {
         interval: 30000
-        running: chart.visible
+        running: historyPlot.visible
         repeat: true
         onTriggered: {
           if (!control.loading) control.axisNow = control.snapshotAxisEnd
-          chart.requestPaint()
         }
       }
 
@@ -321,16 +193,14 @@ Item {
         hoverEnabled: true
         enabled: control.points.length > 0
         cursorShape: Qt.CrossCursor
-        onExited: control.hoverIndex = -1
-        onCanceled: control.hoverIndex = -1
+        onExited: control.hoverTime = -1
+        onCanceled: control.hoverTime = -1
         onPositionChanged: function(mouse) {
-          var frame = control.plotFrame()
-          if (!frame) {
-            control.hoverIndex = -1
-            return
-          }
-          control.hoverIndex = Model.nearestHistoryIndex(
-            frame.samples, mouse.x, frame.left, frame.spanX, frame.minT, frame.maxT)
+          var left = historyPlot.plotLeft
+          var width = Math.max(1, historyPlot.width - left - historyPlot.plotRight)
+          var fraction = Math.max(0, Math.min(1, (mouse.x - left) / width))
+          control.hoverTime = control.axisNow - control.hours * 3600
+            + fraction * control.hours * 3600
         }
         onClicked: function(mouse) { mouse.accepted = true }
       }
@@ -339,15 +209,9 @@ Item {
         textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.top: parent.top
-        visible: chart.visible && control.hoverPoint === null
+        visible: historyPlot.visible && control.hoverPoint === null
         text: {
-          var samples = control.points
-          if (!samples.length) return ""
-          var maxV = samples[0].v
-          for (var i = 1; i < samples.length; i++) {
-            if (samples[i].v > maxV) maxV = samples[i].v
-          }
-          return control.formatValue(maxV)
+          return control.formatValue(control.visibleExtreme(true))
         }
         color: control.dim
         font.family: control.family
@@ -358,15 +222,9 @@ Item {
         textFormat: Text.PlainText
         anchors.left: parent.left
         anchors.bottom: parent.bottom
-        visible: chart.visible && control.hoverPoint === null
+        visible: historyPlot.visible && control.hoverPoint === null
         text: {
-          var samples = control.points
-          if (!samples.length) return ""
-          var minV = samples[0].v
-          for (var i = 1; i < samples.length; i++) {
-            if (samples[i].v < minV) minV = samples[i].v
-          }
-          return control.formatValue(minV)
+          return control.formatValue(control.visibleExtreme(false))
         }
         color: control.dim
         font.family: control.family

@@ -104,14 +104,54 @@ function downsampleHistoryPoints(points, limit) {
     ? Math.floor(limit) : HISTORY_MAX_POINTS
   if (points.length <= cap) return points.slice()
   if (cap === 1) return [points[points.length - 1]]
-  var lastIndex = points.length - 1
+  var selected = { 0: true }
+  selected[points.length - 1] = true
+  var selectedCount = points.length > 1 ? 2 : 1
+  for (var transition = 1; transition < points.length; transition++) {
+    if ((points[transition - 1].v === null) !== (points[transition].v === null)) {
+      if (!selected[transition - 1]) { selected[transition - 1] = true; selectedCount++ }
+      if (!selected[transition]) { selected[transition] = true; selectedCount++ }
+    }
+  }
+  if (selectedCount >= cap) {
+    var required = []
+    for (var requiredIndex = 0; requiredIndex < points.length; requiredIndex++) {
+      if (selected[requiredIndex]) required.push(points[requiredIndex])
+    }
+    var trimmed = []
+    var requiredStep = (required.length - 1) / Math.max(1, cap - 1)
+    for (var requiredSlot = 0; requiredSlot < cap; requiredSlot++)
+      trimmed.push(required[Math.round(requiredSlot * requiredStep)])
+    return trimmed
+  }
+  var capacity = Math.max(0, cap - selectedCount)
+  var buckets = Math.max(1, Math.floor(capacity / 2))
+  var start = Number(points[0].t)
+  var span = Math.max(1, Number(points[points.length - 1].t) - start)
+  for (var bucket = 0; bucket < buckets && selectedCount < cap; bucket++) {
+    var lowT = start + span * bucket / buckets
+    var highT = start + span * (bucket + 1) / buckets
+    var minIndex = -1
+    var maxIndex = -1
+    for (var index = 0; index < points.length; index++) {
+      var point = points[index]
+      if (selected[index] || point.v === null || Number(point.t) < lowT
+          || (Number(point.t) >= highT && bucket !== buckets - 1)) continue
+      if (minIndex < 0 || point.v < points[minIndex].v) minIndex = index
+      if (maxIndex < 0 || point.v > points[maxIndex].v) maxIndex = index
+    }
+    if (minIndex >= 0 && !selected[minIndex]) {
+      selected[minIndex] = true
+      selectedCount++
+    }
+    if (maxIndex >= 0 && selectedCount < cap && !selected[maxIndex]) {
+      selected[maxIndex] = true
+      selectedCount++
+    }
+  }
   var out = []
-  var seen = {}
-  for (var step = 0; step < cap; step++) {
-    var index = Math.round(step * lastIndex / (cap - 1))
-    if (seen[index]) continue
-    seen[index] = true
-    out.push(points[index])
+  for (var outputIndex = 0; outputIndex < points.length; outputIndex++) {
+    if (selected[outputIndex]) out.push(points[outputIndex])
   }
   return out
 }
@@ -128,7 +168,8 @@ function clampHistoryPoints(points, hours, now, maxPoints) {
       var point = points[i]
       if (!point) continue
       if (typeof point.t !== "number" || !isFinite(point.t)) continue
-      if (typeof point.v !== "number" || !isFinite(point.v)) continue
+      if (point.v !== null
+          && (typeof point.v !== "number" || !isFinite(point.v))) continue
       if (point.t < start) continue
       kept.push({ t: point.t, v: point.v })
     }
@@ -145,7 +186,6 @@ function clampHistoryPoints(points, hours, now, maxPoints) {
       var point = points[i]
       if (!point) continue
       if (typeof point.t !== "number" || !isFinite(point.t)) continue
-      if (typeof point.v !== "number" || !isFinite(point.v)) continue
       if (latest === null || point.t > latest) latest = point.t
     }
     if (latest !== null && latest < now) kept = keepFrom(latest)

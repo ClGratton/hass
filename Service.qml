@@ -606,7 +606,8 @@ QtObject {
       var point = raw[i]
       if (!point) continue
       if (typeof point.t !== "number" || !isFinite(point.t)) continue
-      if (typeof point.v !== "number" || !isFinite(point.v)) continue
+      if (point.v !== null
+          && (typeof point.v !== "number" || !isFinite(point.v))) continue
       out.push({ t: point.t, v: point.v })
     }
     return out
@@ -663,13 +664,16 @@ QtObject {
     if (current && hours && current.hours && hours !== current.hours) return
     var windowHours = hours || (current && current.hours) || 1
     var points = root.sanitizeHistoryPoints(event.points)
+    var axisEnd = Number(event.end_time)
+    if (!isFinite(axisEnd)) axisEnd = Model.historyAxisEnd(
+      points, windowHours, Date.now() / 1000)
     root.historyByEntity[entityId] = {
       entityId: entityId,
       hours: windowHours,
       points: Model.clampHistoryPoints(
         points,
-        windowHours, Date.now() / 1000, Model.HISTORY_MAX_POINTS),
-      axisEnd: Model.historyAxisEnd(points, windowHours, Date.now() / 1000),
+        windowHours, axisEnd, Model.HISTORY_MAX_POINTS),
+      axisEnd: axisEnd,
       loading: false,
       error: ""
     }
@@ -682,9 +686,9 @@ QtObject {
     var entry = root.historyByEntity[entityId]
     if (!entry || entry.loading) return
     var value = Model.parseNumericState(entity.state)
-    if (value === null) return
     var hours = entry.hours || 1
-    var now = Date.now() / 1000
+    var stamp = Date.parse(String(entity.last_updated || entity.last_changed || ""))
+    var now = isFinite(stamp) ? stamp / 1000 : entry.axisEnd || Date.now() / 1000
     var existing = entry.points || []
     var points = existing.slice()
     points.push({ t: now, v: value })
@@ -808,7 +812,8 @@ QtObject {
   }
 
   signal commandFailed(string tag)
-  signal historyReady(string tag, var histories, string error)
+  signal historyReady(string tag, var histories, string error,
+                      real startMs, real endMs)
   property int historySequence: 0
 
   function requestHistory(entityIds, hours) {
@@ -820,17 +825,15 @@ QtObject {
       unique.push(entityId)
     }
     if (!unique.length) return ""
-    var span = Math.max(1, Math.min(168, Number(hours) || 24))
-    var end = new Date()
-    var start = new Date(end.getTime() - span * 60 * 60 * 1000)
+    var span = Model.normalizeHistoryHours(hours)
+    if (!span) return ""
     root.historySequence++
     var tag = "history:" + root.connectionGeneration + ":" + root.historySequence
     return root.send({
       op: "history",
       tag: tag,
       entity_ids: unique,
-      start_time: start.toISOString(),
-      end_time: end.toISOString()
+      hours: span
     }) ? tag : ""
   }
 
@@ -1062,8 +1065,12 @@ QtObject {
       root.handleResult(event)
       break
     case "history":
-      root.historyReady(String(event.tag || ""), event.histories || {},
-                        String(event.error || ""))
+      if (event.histories !== undefined)
+        root.historyReady(String(event.tag || ""), event.histories || {},
+                          String(event.error || ""),
+                          Number(event.start_ms || 0), Number(event.end_ms || 0))
+      else
+        root.handleHistory(event)
       break
     case "log":
       if (event.level === "warn") console.warn("hass-bridge: " + event.msg)

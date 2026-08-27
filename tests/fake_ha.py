@@ -7,6 +7,7 @@ IPv6, and what happens when the server hangs up.
 """
 
 import base64
+import email.utils
 import hashlib
 import json
 import os
@@ -77,7 +78,7 @@ def send_declared_frame(conn, opcode, length, fin=True):
                  + struct.pack("!Q", length))
 
 
-def handshake(conn):
+def handshake(conn, server_time=None):
     raw = b""
     while b"\r\n\r\n" not in raw:
         chunk = conn.recv(4096)
@@ -95,7 +96,9 @@ def handshake(conn):
         "HTTP/1.1 101 Switching Protocols\r\n"
         "Upgrade: websocket\r\n"
         "Connection: Upgrade\r\n"
-        "Sec-WebSocket-Accept: %s\r\n\r\n" % accept
+        "Date: %s\r\n"
+        "Sec-WebSocket-Accept: %s\r\n\r\n"
+        % (email.utils.formatdate(server_time or time.time(), usegmt=True), accept)
     ).encode())
     return [rest]
 
@@ -113,7 +116,8 @@ class FakeHA:
     def __init__(self, auth_mode="ok", drop_after=None, fail_calls=False,
                  giant_frame=False, fail_requests=None, delays=None,
                  invalid_message=False, empty_fragments=0,
-                 host="127.0.0.1", tls=False, echo_auth_token=False):
+                 host="127.0.0.1", tls=False, echo_auth_token=False,
+                 server_time_offset=0):
         self.auth_mode = auth_mode
         self.drop_after = drop_after
         # Reject every call_service. Home Assistant does this for a service
@@ -130,6 +134,7 @@ class FakeHA:
         self.host = host
         self.tls = tls
         self.echo_auth_token = echo_auth_token
+        self.server_time_offset = float(server_time_offset)
         self.connections = 0
         self.states = [
             {"entity_id": "light.test", "state": "off",
@@ -183,7 +188,7 @@ class FakeHA:
         try:
             if self._tls_context is not None:
                 conn = self._tls_context.wrap_socket(conn, server_side=True)
-            buf = handshake(conn)
+            buf = handshake(conn, time.time() + self.server_time_offset)
             send_json(conn, {"type": "auth_required", "ha_version": "test"})
             handled = 0
             while not self._stop.is_set():

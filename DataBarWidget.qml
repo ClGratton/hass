@@ -18,6 +18,7 @@ BarWidget {
   property bool historyLoading: false
   property real historyStartMs: 0
   property real historyEndMs: 0
+  property int historyHours: 24
 
   readonly property var barIdentity: hostWidget || root
   readonly property bool opened: popupOpen
@@ -99,14 +100,15 @@ BarWidget {
     return ids
   }
 
-  function loadHistory() {
+  function loadHistory(hours) {
     if (!hass || climateWidget) return
+    var nextHours = Model.normalizeHistoryHours(hours)
+    if (nextHours) root.historyHours = nextHours
     root.historyLoading = true
     root.historyError = ""
     root.histories = ({})
-    root.historyEndMs = Date.now()
-    root.historyStartMs = root.historyEndMs - 24 * 60 * 60 * 1000
-    root.historyTag = hass.requestHistory(root.historyEntityIds(), 24)
+    root.historyTag = hass.requestHistoryBatch(
+      root.historyEntityIds(), root.historyHours)
     if (!root.historyTag) {
       root.historyLoading = false
       root.historyError = "History is unavailable."
@@ -115,7 +117,7 @@ BarWidget {
 
   function open() {
     root.popupOpen = true
-    if (!root.climateWidget) root.loadHistory()
+    if (!root.climateWidget) root.loadHistory(root.historyHours)
   }
 
   function close() { root.popupOpen = false }
@@ -125,11 +127,16 @@ BarWidget {
   Connections {
     target: root.hass
     enabled: root.hass !== null
-    function onHistoryReady(tag, result, error) {
+    function onHistoryReady(tag, result, error, startMs, endMs) {
       if (String(tag) !== root.historyTag) return
       root.historyLoading = false
       root.histories = result || ({})
       root.historyError = String(error || "")
+      if (Number(startMs) > 0 && Number(endMs) > Number(startMs)) {
+        root.historyStartMs = Number(startMs)
+        root.historyEndMs = Number(endMs)
+        return
+      }
       var newest = root.historyEndMs
       for (var entityId in root.histories) {
         var points = root.histories[entityId] || []
@@ -304,7 +311,9 @@ BarWidget {
             width: parent.width
             title: root.displayName
             meta: root.climateWidget ? "Climate controls"
-              : (historyStack.hoverActive ? historyStack.hoverLabel : "Last 24 hours")
+              : (historyStack.hoverActive ? historyStack.hoverLabel
+                : (root.historyHours === 1 ? "Last hour"
+                  : "Last " + root.historyHours + " hours"))
             foreground: root.popupFg
             fontFamily: root.family
 
@@ -342,6 +351,46 @@ BarWidget {
             wrapMode: Text.Wrap
           }
 
+          Flow {
+            id: historyWindows
+            width: parent.width
+            visible: !root.climateWidget
+            height: visible ? implicitHeight : 0
+            spacing: Style.spacing.sm
+
+            Repeater {
+              model: Model.HISTORY_HOURS
+
+              delegate: Rectangle {
+                required property var modelData
+                implicitWidth: windowLabel.implicitWidth + Style.spacing.lg
+                implicitHeight: windowLabel.implicitHeight + Style.spacing.sm
+                radius: height / 2
+                color: root.historyHours === modelData
+                  ? Qt.rgba(root.popupFg.r, root.popupFg.g, root.popupFg.b, 0.16)
+                  : "transparent"
+
+                Text {
+                  id: windowLabel
+                  anchors.centerIn: parent
+                  textFormat: Text.PlainText
+                  text: Model.historyWindowLabel(modelData)
+                  color: root.historyHours === modelData
+                    ? root.popupFg : Qt.darker(root.popupFg, 1.4)
+                  font.family: root.family
+                  font.pixelSize: Style.font.caption
+                  font.bold: root.historyHours === modelData
+                }
+
+                MouseArea {
+                  anchors.fill: parent
+                  cursorShape: Qt.PointingHandCursor
+                  onClicked: root.loadHistory(modelData)
+                }
+              }
+            }
+          }
+
           Item {
             id: historyStack
             width: parent.width
@@ -353,7 +402,8 @@ BarWidget {
             readonly property real hoverTime: root.historyStartMs
               + hoverFraction * Math.max(1, root.historyEndMs - root.historyStartMs)
             readonly property string hoverLabel: {
-              if (!hoverActive) return "Last 24 hours"
+              if (!hoverActive) return root.historyHours === 1
+                ? "Last hour" : "Last " + root.historyHours + " hours"
               return new Date(hoverTime).toLocaleString(Qt.locale(), "ddd HH:mm")
             }
 
@@ -382,6 +432,7 @@ BarWidget {
                   plotStart: root.historyStartMs
                   plotEnd: root.historyEndMs
                   hoverTime: historyStack.hoverActive ? historyStack.hoverTime : -1
+                  windowHours: root.historyHours
                 }
               }
             }

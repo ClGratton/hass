@@ -567,10 +567,20 @@ section("control classification", () => {
        [{ t: 1000, v: 1 }, { t: 2000, v: 2 }, { t: 3000, v: 3 }],
        1, 10000, 240),
      [{ t: 1000, v: 1 }, { t: 2000, v: 2 }, { t: 3000, v: 3 }]);
+  eq("unavailable history remains a gap",
+     Model.clampHistoryPoints(
+       [{ t: 1000, v: 1 }, { t: 1500, v: null }, { t: 2000, v: 2 }],
+       1, 2000, 240),
+     [{ t: 1000, v: 1 }, { t: 1500, v: null }, { t: 2000, v: 2 }]);
   const dense = [];
   for (let i = 0; i < 500; i++) dense.push({ t: 1000 + i, v: i });
   eq("history points are capped",
      Model.clampHistoryPoints(dense, 1, 2000, 240).length <= 240, true);
+  const peaked = [];
+  for (let i = 0; i < 500; i++) peaked.push({ t: 1000 + i, v: i === 250 ? 999 : 10 });
+  eq("min max sampling retains a brief peak",
+     Math.max(...Model.downsampleHistoryPoints(peaked, 40).map((point) => point.v)),
+     999);
   eq("history max points matches the bridge ceiling",
      Model.HISTORY_MAX_POINTS, 240);
 

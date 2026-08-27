@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fake_ha import FakeHA  # noqa: E402
@@ -143,10 +144,11 @@ def test_live_happy_path():
               history is not None and isinstance(history.get("generation"), int),
               history)
         points = history.get("points") if history else None
-        check("history points are numeric samples",
+        check("history points contain numeric samples and explicit gaps",
               isinstance(points, list) and len(points) >= 1
               and all(isinstance(p.get("t"), (int, float))
-                      and isinstance(p.get("v"), (int, float))
+                      and (p.get("v") is None
+                           or isinstance(p.get("v"), (int, float)))
                       and set(p) == {"t", "v"} for p in points),
               points)
         dumped = json.dumps(history) if history else ""
@@ -231,11 +233,11 @@ def test_history_is_normalized():
             lambda e: e["ev"] == "history" and e.get("tag") == "history:test")
         sparse = (event or {}).get("histories", {}).get(
             "sensor.air_temperature", [])
-        check("returns a held-state timeline for a sparse series",
-              len(sparse) == 360
+        check("returns a step timeline with an unavailable gap",
+              len(sparse) >= 5
               and sparse[0]["v"] == 20.5
               and sparse[-1]["v"] == 21.25
-              and all(point["v"] in (20.5, 21.25) for point in sparse),
+              and any(point["v"] is None for point in sparse),
               {"count": len(sparse),
                "first": sparse[0] if sparse else None,
                "last": sparse[-1] if sparse else None})
@@ -255,13 +257,42 @@ def test_history_is_normalized():
         dense_event = bridge.wait_for(
             lambda e: e["ev"] == "history" and e.get("tag") == "history:dense")
         dense = (dense_event or {}).get("histories", {}).get("sensor.dense_power", [])
-        check("downsampling preserves held quiet states without extrema needles",
+        check("min max sampling preserves both extrema and quiet states",
               len(dense) <= 360
-              and sum(1 for point in dense if point["v"] == 0) >= 200
-              and max(point["v"] for point in dense) < 150,
+              and any(point["v"] == 0 for point in dense)
+              and max(point["v"] for point in dense if point["v"] is not None) == 129,
               {"count": len(dense),
                "zeros": sum(1 for point in dense if point["v"] == 0),
-               "maximum": max(point["v"] for point in dense)})
+               "maximum": max(point["v"] for point in dense
+                              if point["v"] is not None)})
+    finally:
+        bridge.stop()
+        server.stop()
+
+
+def test_history_uses_home_assistant_clock():
+    print("history: requested windows follow Home Assistant's clock")
+    server = FakeHA(server_time_offset=7200)
+    bridge = BridgeProc()
+    try:
+        bridge.send({"op": "config", "url": server.url, "token": "tok"})
+        bridge.wait_for(lambda e: e["ev"] == "phase" and e["phase"] == "connected")
+        local_now = time.time()
+        bridge.send({"op": "history", "entity_id": "sensor.kitchen_temperature",
+                     "hours": 1, "tag": "hist-server-clock"})
+        history = bridge.wait_for(
+            lambda e: e["ev"] == "history"
+            and e.get("tag") == "hist-server-clock")
+        request = server.history_requests[0] if server.history_requests else {}
+        requested_end = datetime.fromisoformat(
+            str(request.get("end_time", "")).replace("Z", "+00:00")).timestamp()
+        check("recorder end time uses the handshake Date header",
+              abs(requested_end - (local_now + 7200)) < 5,
+              {"requested": requested_end, "expected": local_now + 7200})
+        check("the server anchored axis is returned to QML",
+              history is not None
+              and abs(history.get("end_time", 0) - requested_end) < 0.01,
+              history)
     finally:
         bridge.stop()
         server.stop()
@@ -1053,9 +1084,11 @@ def test_history_is_downsampled():
         points = history.get("points") if history else []
         check("caps history at 240 points",
               2 <= len(points) <= 240, len(points) if history else None)
-        check("keeps chronological numeric samples",
+        check("keeps chronological samples and explicit gaps",
               points == sorted(points, key=lambda p: p["t"])
-              and all(set(p) == {"t", "v"} for p in points),
+              and all(set(p) == {"t", "v"}
+                      and (p["v"] is None or isinstance(p["v"], (int, float)))
+                      for p in points),
               points[:3] if points else points)
     finally:
         bridge.stop()
@@ -1110,6 +1143,7 @@ def main():
     for test in (test_live_happy_path,
                  test_rejected_service_call_is_reported,
                  test_history_is_normalized,
+                 test_history_uses_home_assistant_clock,
                  test_reports_the_unit_system,
                  test_auth_invalid_once_is_retried,
                  test_auth_invalid_twice_stops,

@@ -115,6 +115,18 @@ for path in QML_FILES:
         check("fontFamily" in block,
               "%s:%d PanelActionButton without fontFamily" % (rel(path), line))
 
+print("sensor rows and bar popups share one history renderer")
+sensor_controls = open(os.path.join(ROOT, "controls", "SensorControls.qml"),
+                       encoding="utf-8").read()
+bar_graph = open(os.path.join(ROOT, "HistoryGraph.qml"), encoding="utf-8").read()
+shared_plot = open(os.path.join(ROOT, "HistoryPlot.qml"), encoding="utf-8").read()
+check("HistoryPlot {" in sensor_controls and "Canvas {" not in sensor_controls,
+      "expanded sensor controls bypass HistoryPlot")
+check("HistoryPlot {" in bar_graph and "Canvas {" not in bar_graph,
+      "bar history graphs bypass HistoryPlot")
+check("Canvas {" in shared_plot,
+      "HistoryPlot has no shared renderer")
+
 print()
 panel = open(os.path.join(ROOT, "Panel.qml"), encoding="utf-8").read()
 entity_row = open(os.path.join(ROOT, "EntityRow.qml"), encoding="utf-8").read()
