@@ -164,7 +164,9 @@ Item {
         readonly property var entry: BarData.roomEntry(card.deviceId)
         readonly property bool added: card.inBar(entry)
         anchors.verticalCenter: parent.verticalCenter
-        visible: cardHover.hovered && card.cardData.readings.length >= 2
+        visible: card.cardData.readings.length >= 2
+        enabled: visible
+        opacity: added || cardHover.hovered ? 1.0 : 0.0
         iconText: added ? "󰍴" : "󰐕"       // md-minus / md-plus
         tooltipText: added ? "Remove room readings from the bar" : "Add room readings to the bar"
         foreground: card.fg
