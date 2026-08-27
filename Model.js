@@ -86,6 +86,18 @@ function historyWindowLabel(hours) {
   return windowHours ? String(windowHours) + "h" : ""
 }
 
+function historyAxisEnd(points, hours, localNow) {
+  var windowHours = normalizeHistoryHours(hours)
+  if (!windowHours || typeof localNow !== "number" || !isFinite(localNow))
+    return 0
+  if (!points || !points.length) return localNow
+  var newest = Number(points[points.length - 1].t)
+  if (!isFinite(newest)) return localNow
+  if (newest > localNow || localNow - newest > windowHours * 3600)
+    return newest
+  return localNow
+}
+
 function downsampleHistoryPoints(points, limit) {
   if (!points || !points.length) return []
   var cap = typeof limit === "number" && isFinite(limit) && limit > 0

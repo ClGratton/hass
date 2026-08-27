@@ -539,6 +539,12 @@ section("control classification", () => {
      [1, 3, 6, 12, 24, 0, 3, 0]);
   eq("a day window is labelled 1d", Model.historyWindowLabel(24), "1d");
   eq("an hour window keeps an h suffix", Model.historyWindowLabel(12), "12h");
+  eq("history axis follows a server clock ahead of the desktop",
+     Model.historyAxisEnd([{t: 110, v: 2}], 1, 100), 110);
+  eq("history axis follows a server clock beyond the local window",
+     Model.historyAxisEnd([{t: 100, v: 2}], 1, 4000), 100);
+  eq("history axis otherwise advances to local now",
+     Model.historyAxisEnd([{t: 90, v: 2}], 1, 100), 100);
   eq("hover uses the last known sample at the cursor time",
      Model.nearestHistoryIndex(
        [{ t: 10, v: 1 }, { t: 20, v: 2 }, { t: 30, v: 3 }],

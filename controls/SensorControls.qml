@@ -49,6 +49,8 @@ Item {
     if (hoverIndex < 0 || hoverIndex >= points.length) return null
     return points[hoverIndex]
   }
+  readonly property real snapshotAxisEnd: snapshot && snapshot.axisEnd
+    ? Number(snapshot.axisEnd) : Date.now() / 1000
 
   onHoursChanged: {
     control.hoverIndex = -1
@@ -56,7 +58,7 @@ Item {
     control.reload()
   }
   onPlotRevisionChanged: {
-    control.axisNow = Date.now() / 1000
+    control.axisNow = control.snapshotAxisEnd
     chart.requestPaint()
   }
   onHoverIndexChanged: chart.requestPaint()
@@ -308,7 +310,7 @@ Item {
         running: chart.visible
         repeat: true
         onTriggered: {
-          control.axisNow = Date.now() / 1000
+          if (!control.loading) control.axisNow = control.snapshotAxisEnd
           chart.requestPaint()
         }
       }
@@ -322,7 +324,6 @@ Item {
         onExited: control.hoverIndex = -1
         onCanceled: control.hoverIndex = -1
         onPositionChanged: function(mouse) {
-          control.axisNow = Date.now() / 1000
           var frame = control.plotFrame()
           if (!frame) {
             control.hoverIndex = -1

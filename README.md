@@ -122,7 +122,8 @@ The IKEA VINDSTYRKA VOC index uses its device-specific relative bands at 150,
 cannot safely be inferred from the entity name alone.
 Once added, the plus becomes a minus that removes that exact widget. Left click
 a climate widget for its compact controls, or a sensor and room widget for a
-24 hour history graph. Right click removes that exact widget from the bar. Each
+synchronized history graph with 1h, 3h, 6h, 12h and 1d windows. Right click
+removes that exact widget from the bar. Each
 child has an independent bar identity, so it can be moved between sections
 without moving or replacing the main Home Assistant icon.
 

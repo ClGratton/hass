@@ -130,6 +130,15 @@ BarWidget {
       root.historyLoading = false
       root.histories = result || ({})
       root.historyError = String(error || "")
+      var newest = root.historyEndMs
+      for (var entityId in root.histories) {
+        var points = root.histories[entityId] || []
+        if (points.length) newest = Math.max(newest, Number(points[points.length - 1].t))
+      }
+      if (newest > root.historyEndMs) {
+        root.historyEndMs = newest
+        root.historyStartMs = newest - root.historyHours * 60 * 60 * 1000
+      }
     }
   }
 

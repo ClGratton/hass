@@ -662,12 +662,14 @@ QtObject {
     var current = root.historyByEntity[entityId]
     if (current && hours && current.hours && hours !== current.hours) return
     var windowHours = hours || (current && current.hours) || 1
+    var points = root.sanitizeHistoryPoints(event.points)
     root.historyByEntity[entityId] = {
       entityId: entityId,
       hours: windowHours,
       points: Model.clampHistoryPoints(
-        root.sanitizeHistoryPoints(event.points),
+        points,
         windowHours, Date.now() / 1000, Model.HISTORY_MAX_POINTS),
+      axisEnd: Model.historyAxisEnd(points, windowHours, Date.now() / 1000),
       loading: false,
       error: ""
     }
@@ -690,6 +692,7 @@ QtObject {
       hours: hours,
       points: Model.clampHistoryPoints(
         points, hours, now, Model.HISTORY_MAX_POINTS),
+      axisEnd: now,
       loading: false,
       error: entry.error || ""
     }
