@@ -3,6 +3,7 @@
 var KEYS = [
   "baseUrl", "localUrl", "trustedNetwork", "demoMode", "favorites",
   "demoFavorites", "roomReadings", "demoRoomReadings",
+  "pinnedRoomReadings", "demoPinnedRoomReadings",
   "panelOrder", "demoPanelOrder",
   "groupByArea", "showEntityIcons", "selectedTab",
   "displayNameOverrides", "iconOverrides"
@@ -83,6 +84,13 @@ function normalizedPanelOrder(value, favorites, roomReadings) {
   return out
 }
 
+function selectedDevices(value, roomReadings) {
+  var requested = deviceList(value)
+  var selected = {}
+  for (var i = 0; i < roomReadings.length; i++) selected[roomReadings[i]] = true
+  return requested.filter(function(id) { return selected[id] === true })
+}
+
 function plainMap(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {}
   var out = {}
@@ -129,6 +137,9 @@ function parse(text, demoDefaults) {
       demoFavorites: demoFavorites,
       roomReadings: roomReadings,
       demoRoomReadings: demoRoomReadings,
+      pinnedRoomReadings: selectedDevices(raw.pinnedRoomReadings, roomReadings),
+      demoPinnedRoomReadings: selectedDevices(
+        raw.demoPinnedRoomReadings, demoRoomReadings),
       panelOrder: normalizedPanelOrder(raw.panelOrder, favorites, roomReadings),
       demoPanelOrder: normalizedPanelOrder(
         raw.demoPanelOrder, demoFavorites, demoRoomReadings),

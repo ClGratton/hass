@@ -12,8 +12,10 @@ Item {
   required property string deviceId
   property QtObject bar: null
   property bool expanded: false
+  property bool pinned: false
 
   signal expansionRequested()
+  signal pinRequested()
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
@@ -87,6 +89,18 @@ Item {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.spacing.md
 
+      PanelActionButton {
+        anchors.verticalCenter: parent.verticalCenter
+        iconText: ""                         // Font Awesome thumb tack
+        tooltipText: card.pinned
+          ? "Unpin expanded readings" : "Keep readings expanded"
+        foreground: card.pinned ? card.fg : card.dim
+        fontFamily: card.family
+        size: Style.space(24)
+        bordered: card.pinned
+        onClicked: card.pinRequested()
+      }
+
       ToggleSwitch {
         id: primaryControl
         anchors.verticalCenter: parent.verticalCenter
@@ -103,8 +117,10 @@ Item {
 
       PanelActionButton {
         anchors.verticalCenter: parent.verticalCenter
+        enabled: !card.pinned
         iconText: card.expanded ? "󰅃" : "󰅀"
-        tooltipText: card.expanded ? "Collapse readings" : "Show readings"
+        tooltipText: card.pinned ? "Pinned open"
+          : (card.expanded ? "Collapse readings" : "Show readings")
         foreground: card.dim
         fontFamily: card.family
         onClicked: card.expansionRequested()

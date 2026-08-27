@@ -52,6 +52,8 @@ CursorSurface {
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property color inactive: Qt.darker(fg, 1.5)
   readonly property bool roomReading: row.rowKind === "room_reading"
+  readonly property bool roomPinned: row.roomReading && row.hass !== null
+    && row.hass.isRoomReadingPinned(row.roomDeviceId)
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
 
@@ -246,7 +248,9 @@ CursorSurface {
           deviceId: row.roomDeviceId
           bar: row.bar
           expanded: row.expanded
+          pinned: row.roomPinned
           onExpansionRequested: row.expandToggled()
+          onPinRequested: row.hass.toggleRoomReadingPinned(row.roomDeviceId)
         }
       }
     }

@@ -502,7 +502,9 @@ Panel {
                 reserveExpandSlot: root.serviceReady ? root.hass.rowsHaveExpandable : false
                 hasCursor: root.cursorActive && root.cursorIndex === index
                   && root.expandedControlCursorIndex < 0
-                expanded: root.expandedEntityId === entityId
+                expanded: (rowKind === "room_reading" && root.serviceReady
+                  && root.hass.isRoomReadingPinned(roomDeviceId))
+                  || root.expandedEntityId === entityId
                 expandedControlCursorIndex: root.cursorIndex === index
                   ? root.expandedControlCursorIndex : -1
                 onCursorRequested: {

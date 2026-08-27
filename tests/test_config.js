@@ -45,6 +45,8 @@ eq("typed values are normalized", parsed.config, {
   demoFavorites: [],
   roomReadings: [],
   demoRoomReadings: [],
+  pinnedRoomReadings: [],
+  demoPinnedRoomReadings: [],
   panelOrder: ["light.a"],
   demoPanelOrder: [],
   groupByArea: false,
@@ -67,6 +69,8 @@ const withRooms = Config.parse(JSON.stringify({
   favorites: ["light.desk"],
   roomReadings: ["abc123", "abc123", "device.room", "bad value", "__proto__"],
   demoRoomReadings: ["device.demo"],
+  pinnedRoomReadings: ["abc123", "missing", "abc123"],
+  demoPinnedRoomReadings: ["device.demo", "missing"],
   panelOrder: ["room_reading:abc123", "light.desk", "room_reading:missing"],
   demoPanelOrder: ["room_reading:device.demo", "bad value"]
 }), []);
@@ -74,6 +78,10 @@ eq("room-reading device ids are normalized independently from entity ids",
    withRooms.config.roomReadings, ["abc123", "device.room"]);
 eq("demo room readings use their own namespace",
    withRooms.config.demoRoomReadings, ["device.demo"]);
+eq("only selected room readings remain pinned",
+   withRooms.config.pinnedRoomReadings, ["abc123"]);
+eq("demo pins use their own selected room namespace",
+   withRooms.config.demoPinnedRoomReadings, ["device.demo"]);
 eq("one panel order interleaves entities and room-reading cards",
    withRooms.config.panelOrder, ["room_reading:abc123", "light.desk",
                                  "room_reading:device.room"]);

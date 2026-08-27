@@ -62,6 +62,10 @@ QtObject {
   property var demoRoomReadings: []
   readonly property var roomReadings: root.demoMode
     ? root.demoRoomReadings : root.liveRoomReadings
+  property var livePinnedRoomReadings: []
+  property var demoPinnedRoomReadings: []
+  readonly property var pinnedRoomReadings: root.demoMode
+    ? root.demoPinnedRoomReadings : root.livePinnedRoomReadings
   property var livePanelOrder: []
   property var demoPanelOrder: []
   readonly property var panelOrder: root.demoMode
@@ -111,6 +115,8 @@ QtObject {
       demoFavorites: root.demoFavorites.slice(),
       roomReadings: root.liveRoomReadings.slice(),
       demoRoomReadings: root.demoRoomReadings.slice(),
+      pinnedRoomReadings: root.livePinnedRoomReadings.slice(),
+      demoPinnedRoomReadings: root.demoPinnedRoomReadings.slice(),
       panelOrder: root.livePanelOrder.slice(),
       demoPanelOrder: root.demoPanelOrder.slice(),
       groupByArea: root.groupByArea,
@@ -175,14 +181,18 @@ QtObject {
       ? { demoPanelOrder: order } : { panelOrder: order })
   }
 
-  function savePanelSelection(favorites, roomReadings, order) {
+  function savePanelSelection(favorites, roomReadings, order, pinnedRooms) {
+    var pins = pinnedRooms === undefined
+      ? root.pinnedRoomReadings.slice() : pinnedRooms
     root.saveConfig(root.demoMode ? {
       demoFavorites: favorites,
       demoRoomReadings: roomReadings,
+      demoPinnedRoomReadings: pins,
       demoPanelOrder: order
     } : {
       favorites: favorites,
       roomReadings: roomReadings,
+      pinnedRoomReadings: pins,
       panelOrder: order
     })
   }
@@ -196,19 +206,36 @@ QtObject {
     var order = root.panelOrder.slice()
     var itemId = "room_reading:" + deviceId
     var index = selected.indexOf(deviceId)
+    var pinned = root.pinnedRoomReadings.slice()
     if (index === -1) {
       selected.push(deviceId)
       if (order.indexOf(itemId) === -1) order.push(itemId)
     } else {
       selected.splice(index, 1)
+      var pinnedIndex = pinned.indexOf(deviceId)
+      if (pinnedIndex !== -1) pinned.splice(pinnedIndex, 1)
       var orderIndex = order.indexOf(itemId)
       if (orderIndex !== -1) order.splice(orderIndex, 1)
     }
-    root.savePanelSelection(root.favorites.slice(), selected, order)
+    root.savePanelSelection(root.favorites.slice(), selected, order, pinned)
   }
 
   function isRoomReading(deviceId) {
     return root.roomReadings.indexOf(deviceId) !== -1
+  }
+
+  function isRoomReadingPinned(deviceId) {
+    return root.pinnedRoomReadings.indexOf(deviceId) !== -1
+  }
+
+  function toggleRoomReadingPinned(deviceId) {
+    if (!root.isRoomReading(deviceId)) return
+    var pinned = root.pinnedRoomReadings.slice()
+    var index = pinned.indexOf(deviceId)
+    if (index === -1) pinned.push(deviceId)
+    else pinned.splice(index, 1)
+    root.savePanelSelection(root.favorites.slice(), root.roomReadings.slice(),
+                            root.panelOrder.slice(), pinned)
   }
 
   // ------------------------------------------------------------ credentials
@@ -271,7 +298,7 @@ QtObject {
     root.connectionSuppressed = false
     root.saveConfig({
       baseUrl: "", localUrl: "", trustedNetwork: "", demoMode: false,
-      favorites: [], roomReadings: [], panelOrder: [],
+      favorites: [], roomReadings: [], pinnedRoomReadings: [], panelOrder: [],
       displayNameOverrides: {}, iconOverrides: {}, selectedTab: "favorites"
     })   // demoFavorites untouched: not part of the connection
   }
@@ -378,6 +405,8 @@ QtObject {
     root.demoFavorites = config.demoFavorites
     root.liveRoomReadings = config.roomReadings
     root.demoRoomReadings = config.demoRoomReadings
+    root.livePinnedRoomReadings = config.pinnedRoomReadings
+    root.demoPinnedRoomReadings = config.demoPinnedRoomReadings
     root.livePanelOrder = config.panelOrder
     root.demoPanelOrder = config.demoPanelOrder
     root.displayNameOverrides = config.displayNameOverrides
