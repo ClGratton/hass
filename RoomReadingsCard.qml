@@ -40,10 +40,13 @@ Item {
     return BarData.contains(shellConfig(), entry)
   }
 
-  function addToBar(entry) {
-    if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function"
-        || inBar(entry)) return
-    bar.shell.mutateShellConfig(function(config) { BarData.add(config, entry) })
+  function toggleBar(entry) {
+    if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function") return
+    var remove = inBar(entry)
+    bar.shell.mutateShellConfig(function(config) {
+      if (remove) BarData.remove(config, entry)
+      else BarData.add(config, entry)
+    })
   }
 
   width: parent ? parent.width : 0
@@ -162,12 +165,11 @@ Item {
         readonly property bool added: card.inBar(entry)
         anchors.verticalCenter: parent.verticalCenter
         visible: cardHover.hovered && card.cardData.readings.length >= 2
-        enabled: !added
-        iconText: added ? "󰄬" : "󰐕"       // md-check / md-plus
-        tooltipText: added ? "Room readings are in the bar" : "Add room readings to the bar"
+        iconText: added ? "󰍴" : "󰐕"       // md-minus / md-plus
+        tooltipText: added ? "Remove room readings from the bar" : "Add room readings to the bar"
         foreground: card.fg
         fontFamily: card.family
-        onClicked: card.addToBar(entry)
+        onClicked: card.toggleBar(entry)
       }
       ToggleSwitch {
         id: primaryControl
@@ -271,15 +273,14 @@ Item {
           anchors.right: parent.right
           anchors.margins: Style.spacing.xxs
           visible: metricHover.hovered
-          enabled: !metric.added
-          iconText: metric.added ? "󰄬" : "󰐕"  // md-check / md-plus
+          iconText: metric.added ? "󰍴" : "󰐕"  // md-minus / md-plus
           tooltipText: metric.added
-            ? metric.reading.label + " is in the bar"
+            ? "Remove " + metric.reading.label + " from the bar"
             : "Add " + metric.reading.label + " to the bar"
           foreground: metric.qualityColor
           fontFamily: card.family
           size: Style.space(20)
-          onClicked: card.addToBar(metric.entry)
+          onClicked: card.toggleBar(metric.entry)
         }
       }
   }

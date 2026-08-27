@@ -49,6 +49,7 @@ QtObject {
 
   property var areaNames: Object.create(null)
   property var entityArea: Object.create(null)
+  property var entityDevice: Object.create(null)
   property var deviceNames: Object.create(null)
   property var deviceInfo: Object.create(null)
   property var deviceArea: Object.create(null)
@@ -446,6 +447,7 @@ QtObject {
     root.sortedEntityIds = []
     root.areaNames = Object.create(null)
     root.entityArea = Object.create(null)
+    root.entityDevice = Object.create(null)
     root.deviceNames = Object.create(null)
     root.deviceInfo = Object.create(null)
     root.deviceArea = Object.create(null)
@@ -802,6 +804,31 @@ QtObject {
   }
 
   signal commandFailed(string tag)
+  signal historyReady(string tag, var histories, string error)
+  property int historySequence: 0
+
+  function requestHistory(entityIds, hours) {
+    if (!Array.isArray(entityIds) || entityIds.length === 0) return ""
+    var unique = []
+    for (var i = 0; i < entityIds.length && unique.length < 8; i++) {
+      var entityId = String(entityIds[i] || "")
+      if (!entityId || !root.states[entityId] || unique.indexOf(entityId) !== -1) continue
+      unique.push(entityId)
+    }
+    if (!unique.length) return ""
+    var span = Math.max(1, Math.min(168, Number(hours) || 24))
+    var end = new Date()
+    var start = new Date(end.getTime() - span * 60 * 60 * 1000)
+    root.historySequence++
+    var tag = "history:" + root.connectionGeneration + ":" + root.historySequence
+    return root.send({
+      op: "history",
+      tag: tag,
+      entity_ids: unique,
+      start_time: start.toISOString(),
+      end_time: end.toISOString()
+    }) ? tag : ""
+  }
 
   // Returns the tag to match a later failure against, or "" if nothing went out.
   function callTagged(domain, service, entityId, data) {
@@ -1031,7 +1058,8 @@ QtObject {
       root.handleResult(event)
       break
     case "history":
-      root.handleHistory(event)
+      root.historyReady(String(event.tag || ""), event.histories || {},
+                        String(event.error || ""))
       break
     case "log":
       if (event.level === "warn") console.warn("hass-bridge: " + event.msg)
@@ -1141,6 +1169,7 @@ QtObject {
       event.areas, event.entities, event.devices)
     root.areaNames = projection.areaNames
     root.entityArea = projection.entityArea
+    root.entityDevice = projection.entityDevice
     root.savedFavoriteColors = projection.favoriteColors
     root.deviceNames = projection.deviceNames
     root.deviceInfo = projection.deviceInfo
@@ -1214,6 +1243,12 @@ QtObject {
       return a.order === b.order ? a.label.localeCompare(b.label) : a.order - b.order
     })
     return readings
+  }
+
+  function barDataReadingsForEntity(entityId) {
+    var deviceId = root.entityDevice[entityId]
+    return Model.barDataReadings(root.states[entityId], root.temperatureUnit,
+                                 deviceId ? root.deviceInfo[deviceId] : null)
   }
 
   function deviceDisplayName(deviceId, entityIds) {

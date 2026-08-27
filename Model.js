@@ -436,6 +436,84 @@ function roomReadingSummary(readings, limit) {
   return parts.join(" · ")
 }
 
+function barDataEligible(entity) {
+  var dom = domain(entity)
+  return dom === "sensor" || dom === "binary_sensor" || dom === "climate"
+}
+
+function barDataReadings(entity, unitFallback, device) {
+  if (!entity) return []
+  var environmental = environmentalReading(entity, device)
+  if (environmental) return [environmental]
+
+  if (domain(entity) !== "climate") {
+    return [{
+      entityId: String(entity.entity_id || ""),
+      kind: "state",
+      label: name(entity),
+      value: displayState(entity),
+      quality: isUnavailable(entity) ? "unknown" : "neutral",
+      order: 10
+    }]
+  }
+
+  if (isUnavailable(entity)) {
+    return [{
+      entityId: String(entity.entity_id || ""),
+      kind: "climate_state",
+      label: "AC",
+      value: displayState(entity),
+      quality: "unknown",
+      order: 10
+    }]
+  }
+
+  var a = attrs(entity)
+  var unit = temperatureUnit(entity, unitFallback)
+  var readings = []
+  if (typeof a.current_temperature === "number" && isFinite(a.current_temperature)) {
+    readings.push({
+      entityId: String(entity.entity_id || ""),
+      kind: "climate_current",
+      label: "Current",
+      value: formatTemp(a.current_temperature, unit),
+      quality: "neutral",
+      order: 10
+    })
+  }
+
+  var target = ""
+  if (typeof a.target_temp_low === "number" && isFinite(a.target_temp_low)
+      && typeof a.target_temp_high === "number" && isFinite(a.target_temp_high)) {
+    target = formatTemp(a.target_temp_low, "") + "–"
+      + formatTemp(a.target_temp_high, unit)
+  } else if (typeof a.temperature === "number" && isFinite(a.temperature)) {
+    target = formatTemp(a.temperature, unit)
+  }
+  if (target) {
+    readings.push({
+      entityId: String(entity.entity_id || ""),
+      kind: "climate_target",
+      label: "Target",
+      value: "→ " + target,
+      quality: "neutral",
+      order: 20
+    })
+  }
+
+  if (!readings.length) {
+    readings.push({
+      entityId: String(entity.entity_id || ""),
+      kind: "climate_state",
+      label: "Mode",
+      value: displayState(entity),
+      quality: "neutral",
+      order: 10
+    })
+  }
+  return readings
+}
+
 function mediaSubtitle(entity) {
   var a = attrs(entity)
   var title = cleaned(a.media_title)

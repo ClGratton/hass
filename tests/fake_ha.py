@@ -282,22 +282,38 @@ class FakeHA:
                 "data": {"entity_id": "light.test", "new_state": self.states[0]}}})
         elif kind == "history/history_during_period":
             self.history_requests.append(msg)
-            entity_ids = msg.get("entity_ids") or []
-            entity_id = entity_ids[0] if entity_ids else "sensor.test"
-            now = time.time()
-            rows = [{
-                "s": "unavailable",
-                "lu": now - (self.history_point_count + 1) * 10,
-                "a": {"access_token": "leak-me", "friendly_name": "Secret"},
-            }]
-            for index in range(self.history_point_count):
-                rows.append({
-                    "s": str(round(20 + index * 0.01, 2)),
-                    "lu": now - (self.history_point_count - index) * 10,
-                    "a": {"access_token": "leak-me"},
-                })
+            result = {}
+            for entity_id in msg.get("entity_ids") or []:
+                if entity_id == "sensor.dense_power":
+                    result[entity_id] = [
+                        {"s": str(100 + index % 30), "lu": 1787824800 + index}
+                        for index in range(700)
+                    ] + [
+                        {"s": "0", "lu": 1787828400 + index * 900}
+                        for index in range(12)
+                    ]
+                elif entity_id == "sensor.air_temperature":
+                    result[entity_id] = [
+                        {"s": "20.5", "lu": 1787824800},
+                        {"s": "unknown", "lu": 1787828400},
+                        {"s": "21.25", "lu": 1787832000},
+                    ]
+                else:
+                    now = time.time()
+                    rows = [{
+                        "s": "unavailable",
+                        "lu": now - (self.history_point_count + 1) * 10,
+                        "a": {"access_token": "leak-me", "friendly_name": "Secret"},
+                    }]
+                    for index in range(self.history_point_count):
+                        rows.append({
+                            "s": str(round(20 + index * 0.01, 2)),
+                            "lu": now - (self.history_point_count - index) * 10,
+                            "a": {"access_token": "leak-me"},
+                        })
+                    result[entity_id] = rows
             send_json(conn, {"id": msg_id, "type": "result", "success": True,
-                             "result": {entity_id: rows}})
+                             "result": result})
         else:
             send_json(conn, {"id": msg_id, "type": "result", "success": False,
                              "error": {"code": "unknown", "message": "no such command"}})

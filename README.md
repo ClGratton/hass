@@ -115,8 +115,16 @@ other unitless VOC indices remain neutral.
 Hover a room card header to add the whole group to the bar, or hover one of
 its reading tiles to add only that reading. Both can coexist as independent
 bar widgets. Values use the active Omarchy theme and air quality readings carry
-the same quality colours as the room card. Left click a data widget to open
-Home Assistant and right click it to remove that exact widget from the bar.
+the same quality colours as the room card. Sensor and climate rows expose the
+same action; a climate widget shows the live room temperature and target.
+The IKEA VINDSTYRKA VOC index uses its device-specific relative bands at 150,
+250 and 400. Other unitless VOC index sensors stay neutral because their scale
+cannot safely be inferred from the entity name alone.
+Once added, the plus becomes a minus that removes that exact widget. Left click
+a climate widget for its compact controls, or a sensor and room widget for a
+24 hour history graph. Right click removes that exact widget from the bar. Each
+child has an independent bar identity, so it can be moved between sections
+without moving or replacing the main Home Assistant icon.
 
 Optionally, turn on **Local network URL** to add your instance's LAN address.
 It's the same Home Assistant instance reached by a different address, so it

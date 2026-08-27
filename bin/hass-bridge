@@ -34,6 +34,9 @@ Commands (stdin)
         Uses a longer request timeout than ordinary commands.
     {"op":"refresh"}       re-request the full state snapshot
     {"op":"registries"}    re-request area/entity/device registries
+    {"op":"history","tag":"history:1","entity_ids":["sensor.x"],
+     "start_time":"2026-08-26T10:00:00.000Z",
+     "end_time":"2026-08-27T10:00:00.000Z"}
     {"op":"shutdown"}
 
 Events (stdout)
@@ -47,6 +50,8 @@ Events (stdout)
     {"ev":"removed","entity_id":"..."}        entity disappeared
     {"ev":"registries","areas":[...],"entities":[...],"devices":[...]}
     {"ev":"config","unit_temperature":"°C"}   instance-wide unit system
+    {"ev":"history","tag":"history:1","histories":{"sensor.x":[
+     {"t":1787824800000,"v":24.2}]},"error":""}
     {"ev":"result","tag":"...","ok":true,"error":"...",
      "errorKind":"command"}
     {"ev":"history","tag":"...","entity_id":"sensor.x","hours":1,
@@ -107,6 +112,9 @@ WS_SCHEMES = {"https": "wss", "http": "ws", "wss": "wss", "ws": "ws"}
 # How long we wait for Home Assistant to answer a request before giving the
 # shell its error back.
 REQUEST_TIMEOUT = 5.0
+HISTORY_TIMEOUT = 20.0
+MAX_HISTORY_ENTITIES = 8
+MAX_HISTORY_POINTS = 360
 # Recorder history can be slow on modest hardware or long windows; keep that
 # path separate so ordinary commands stay snappy.
 HISTORY_REQUEST_TIMEOUT = 20.0
@@ -1055,34 +1063,60 @@ class Bridge:
 
     def request_history(self, command):
         tag = command.get("tag")
-        entity_id = command.get("entity_id")
-        hours = normalize_history_hours(command.get("hours"))
-        if not valid_sensor_entity_id(entity_id):
-            self.emit_result(tag, False, "Invalid sensor entity id.")
-            return
-        if hours is None:
-            self.emit_result(tag, False, "History window must be 1, 3, 6, 12, or 24 hours.")
-            return
-        if not self.authenticated or self.phase != "connected":
-            self.emit_result(tag, False, "Not connected to Home Assistant.")
-            return
-        end = datetime.now(timezone.utc)
-        start = end - timedelta(hours=hours)
+        batch_mode = isinstance(command.get("entity_ids"), list)
+        if batch_mode:
+            entity_ids = command.get("entity_ids")
+            start_time = command.get("start_time")
+            end_time = command.get("end_time")
+            if not isinstance(tag, str) or not tag or len(tag) > 120:
+                return
+            if (not entity_ids or len(entity_ids) > MAX_HISTORY_ENTITIES
+                    or any(not isinstance(value, str) or not value
+                           or len(value) > 255 for value in entity_ids)):
+                self.emit_history(tag, {}, "Invalid history entity list.")
+                return
+            if not isinstance(start_time, str) or not start_time:
+                self.emit_history(tag, {}, "Invalid history start time.")
+                return
+            if not isinstance(end_time, str) or not end_time:
+                self.emit_history(tag, {}, "Invalid history end time.")
+                return
+            entity_ids = list(dict.fromkeys(entity_ids))
+            context = {"mode": "batch", "start_time": start_time,
+                       "end_time": end_time}
+        else:
+            entity_id = command.get("entity_id")
+            hours = normalize_history_hours(command.get("hours"))
+            if not valid_sensor_entity_id(entity_id):
+                self.emit_result(tag, False, "Invalid sensor entity id.")
+                return
+            if hours is None:
+                self.emit_result(tag, False,
+                                 "History window must be 1, 3, 6, 12, or 24 hours.")
+                return
+            if not self.authenticated or self.phase != "connected":
+                self.emit_result(tag, False, "Not connected to Home Assistant.")
+                return
+            end = datetime.now(timezone.utc)
+            start = end - timedelta(hours=hours)
+            start_time = isoformat_z(start)
+            end_time = isoformat_z(end)
+            entity_ids = [entity_id]
+            context = {"mode": "single", "entity_id": entity_id,
+                       "hours": hours, "start_time": start_time,
+                       "end_time": end_time}
         payload = {
             "type": "history/history_during_period",
-            "start_time": isoformat_z(start),
-            "end_time": isoformat_z(end),
-            "entity_ids": [entity_id],
+            "start_time": start_time,
+            "end_time": end_time,
+            "entity_ids": entity_ids,
             "include_start_time_state": True,
             "significant_changes_only": False,
             "minimal_response": True,
             "no_attributes": True,
         }
-        msg_id = self.request("history", payload, tag=tag,
-                              timeout=HISTORY_REQUEST_TIMEOUT)
-        if msg_id is not None:
-            self.pending[msg_id]["entity_id"] = entity_id
-            self.pending[msg_id]["hours"] = hours
+        self.request("history", payload, tag=tag, timeout=HISTORY_TIMEOUT,
+                     batch=entity_ids, context=context)
 
     # -- request plumbing --------------------------------------------------
 
@@ -1100,10 +1134,27 @@ class Bridge:
             payload["errorKind"] = "command"
         self.emit(payload)
 
+    def emit_history(self, tag, histories, error=""):
+        payload = {"ev": "history", "tag": str(tag or ""),
+                   "histories": histories if isinstance(histories, dict) else {}}
+        if error:
+            payload["error"] = self.safe_error(error)
+        self.emit(payload)
+
+    def fail_history(self, pending, error):
+        context = pending.get("context") or {}
+        if context.get("mode") == "single":
+            self.emit_result(pending.get("tag"), False, error)
+        else:
+            self.emit_history(pending.get("tag"), {}, error)
+
     def request(self, kind, payload, tag=None, critical=False, batch=None,
-                timeout=None):
+                timeout=None, context=None):
         if not self.transport or not self.authenticated:
-            self.emit_result(tag, False, "Not connected to Home Assistant.")
+            if kind == "history" and (context or {}).get("mode") != "single":
+                self.emit_history(tag, {}, "Not connected to Home Assistant.")
+            else:
+                self.emit_result(tag, False, "Not connected to Home Assistant.")
             return None
         if kind == "call_service" and self.phase != "connected":
             self.emit_result(tag, False, "Home Assistant is still synchronizing.")
@@ -1118,6 +1169,7 @@ class Bridge:
             "critical": critical,
             "epoch": self.transport_epoch,
             "batch": batch,
+            "context": context if isinstance(context, dict) else {},
         }
         try:
             self.transport.send(payload)
@@ -1169,8 +1221,12 @@ class Bridge:
             pending = self.pending.pop(msg_id)
             kind = pending["kind"]
             if pending["tag"]:
-                self.emit_result(pending["tag"], False,
-                                 "Home Assistant did not answer in time.")
+                if kind == "history":
+                    self.fail_history(
+                        pending, "Home Assistant history did not answer in time.")
+                else:
+                    self.emit_result(pending["tag"], False,
+                                     "Home Assistant did not answer in time.")
             elif kind in ("areas", "entity_registry", "device_registry"):
                 self.log("warn", "request %s (%s) timed out" % (msg_id, kind))
                 self.finish_registry_part(
@@ -1332,7 +1388,10 @@ class Bridge:
         self.registry_pending = set()
         for pending in self.pending.values():
             if pending["tag"]:
-                self.emit_result(pending["tag"], False, "Connection lost.")
+                if pending["kind"] == "history":
+                    self.fail_history(pending, "Connection lost.")
+                else:
+                    self.emit_result(pending["tag"], False, "Connection lost.")
         self.pending = {}
 
     def schedule_retry(self, message, error_kind="connection"):
@@ -1420,7 +1479,9 @@ class Bridge:
             raw_error = error_obj.get("message") if isinstance(error_obj, dict) else ""
             error = raw_error if isinstance(raw_error, str) and raw_error \
                 else "Home Assistant rejected the request."
-            if tag:
+            if kind == "history":
+                self.fail_history(pending, error)
+            elif tag:
                 self.emit_result(tag, False, error)
             elif kind in ("areas", "entity_registry", "device_registry"):
                 self.log("warn", "%s failed: %s" % (kind, self.safe_error(error)))
@@ -1459,20 +1520,118 @@ class Bridge:
             self.emit({"ev": "config",
                        "unit_temperature": units.get("temperature", "")})
         elif kind == "history":
-            entity_id = pending.get("entity_id")
-            hours = pending.get("hours")
-            points = extract_history_points(result, entity_id)
-            payload = {
-                "ev": "history",
-                "entity_id": entity_id,
-                "hours": hours,
-                "points": points,
-            }
-            if tag:
-                payload["tag"] = str(tag)
-            self.emit(payload)
+            context = pending.get("context") or {}
+            histories = self.normalize_history(
+                result, pending.get("batch"), context.get("start_time"),
+                context.get("end_time"),
+                HISTORY_MAX_POINTS if context.get("mode") == "single"
+                else MAX_HISTORY_POINTS)
+            if context.get("mode") == "single":
+                entity_id = context.get("entity_id")
+                points = [{"t": point["t"] / 1000.0, "v": point["v"]}
+                          for point in histories.get(entity_id, [])]
+                payload = {"ev": "history", "entity_id": entity_id,
+                           "hours": context.get("hours"), "points": points}
+                if tag:
+                    payload["tag"] = str(tag)
+                self.emit(payload)
+            else:
+                self.emit_history(tag, histories)
         elif tag:
             self.emit_result(tag, True)
+
+    @staticmethod
+    def normalize_history(result, requested, start_time=None, end_time=None,
+                          point_limit=MAX_HISTORY_POINTS):
+        if not isinstance(result, dict):
+            return {}
+        out = {}
+        for entity_id in requested or []:
+            raw_points = result.get(entity_id)
+            if not isinstance(raw_points, list):
+                continue
+            points = []
+            for raw in raw_points:
+                if not isinstance(raw, dict):
+                    continue
+                state = raw.get("s", raw.get("state"))
+                timestamp = raw.get("lu", raw.get("lc"))
+                try:
+                    value = float(state)
+                    instant = float(timestamp)
+                except (TypeError, ValueError):
+                    continue
+                if not math.isfinite(value) or not math.isfinite(instant):
+                    continue
+                points.append({"t": round(instant * 1000), "v": value})
+            if points:
+                points = Bridge.downsample_history(
+                    points, point_limit,
+                    Bridge.history_time_ms(start_time),
+                    Bridge.history_time_ms(end_time))
+            out[entity_id] = points
+        return out
+
+    @staticmethod
+    def history_time_ms(value):
+        try:
+            return round(datetime.fromisoformat(str(value)).timestamp() * 1000)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+    @staticmethod
+    def downsample_history(points, limit, requested_start=None,
+                           requested_end=None):
+        """Represent uniform time intervals by their held-state average.
+
+        Sampling every Nth event heavily favors a noisy period. A power sensor
+        can report every second overnight and only occasionally while solar is
+        active. Home Assistant history points are state changes, not isolated
+        samples: a reported zero remains zero until the next point. Averaging
+        each bucket by the time every state was held preserves that baseline,
+        avoids diagonal bridges across quiet periods, and gives brief glitches
+        only the visual weight of their actual duration.
+        """
+        if not points or limit < 2:
+            return points[:limit]
+        ordered = sorted(points, key=lambda point: point["t"])
+        first = ordered[0]
+        last = ordered[-1]
+        range_start = first["t"] if requested_start is None else max(
+            first["t"], requested_start)
+        range_end = last["t"] if requested_end is None else max(
+            last["t"], requested_end)
+        span = max(1, range_end - range_start)
+        bucket_count = max(1, limit)
+        sampled = []
+        event_index = 0
+        current_value = first["v"]
+        for bucket_index in range(bucket_count):
+            bucket_start = range_start + span * bucket_index / bucket_count
+            bucket_end = range_start + span * (bucket_index + 1) / bucket_count
+            cursor = bucket_start
+            weighted_sum = 0.0
+
+            while (event_index + 1 < len(ordered)
+                   and ordered[event_index + 1]["t"] <= bucket_start):
+                event_index += 1
+                current_value = ordered[event_index]["v"]
+
+            while (event_index + 1 < len(ordered)
+                   and ordered[event_index + 1]["t"] < bucket_end):
+                change_time = ordered[event_index + 1]["t"]
+                weighted_sum += current_value * max(0, change_time - cursor)
+                cursor = change_time
+                event_index += 1
+                current_value = ordered[event_index]["v"]
+
+            weighted_sum += current_value * max(0, bucket_end - cursor)
+            duration = max(1, bucket_end - bucket_start)
+            sampled.append({
+                "t": round((bucket_start + bucket_end) / 2),
+                "v": weighted_sum / duration,
+            })
+        return sampled
 
     def maybe_ready(self):
         if self.subscription_ready and self.snapshot_ready:

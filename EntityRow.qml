@@ -2,6 +2,8 @@ import QtQuick
 import qs.Ui
 import qs.Commons
 import "controls"
+import "Model.js" as Model
+import "BarData.js" as BarData
 
 // One device in the panel list, shaped after bluetooth/Panel.qml's DeviceRow.
 // The switch handles its own click, so on an expandable row the body is free
@@ -36,6 +38,7 @@ CursorSurface {
   signal expandedControlCursorRequested(int index)
 
   property bool expanded: false
+  property bool barActionHovered: false
   property int expandedControlCursorIndex: -1
   readonly property int expandedControlCount: (row.domain === "climate"
     || row.domain === "sensor")
@@ -58,6 +61,24 @@ CursorSurface {
     && row.hass.isRoomReadingPinned(row.roomDeviceId)
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
+  readonly property bool barDataEligible: !row.roomReading
+    && Model.barDataEligible(row.entity)
+  readonly property var barEntry: BarData.entityEntry(row.entityId)
+  readonly property bool barInBar: {
+    var config = row.bar && row.bar.shell ? row.bar.shell.shellConfig : null
+    return BarData.contains(config, row.barEntry)
+  }
+
+  function toggleBarData() {
+    if (!row.bar || !row.bar.shell
+        || typeof row.bar.shell.mutateShellConfig !== "function") return
+    var remove = row.barInBar
+    var target = row.barEntry
+    row.bar.shell.mutateShellConfig(function(config) {
+      if (remove) BarData.remove(config, target)
+      else BarData.add(config, target)
+    })
+  }
 
   foreground: fg
   // A fill of its own, or the controls run into the next device.
@@ -110,6 +131,7 @@ CursorSurface {
   // Declared first so the buttons above keep their own clicks.
   MouseArea {
     id: rowMouse
+    z: 0
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: row.actionable ? Qt.PointingHandCursor : Qt.ArrowCursor
@@ -125,6 +147,7 @@ CursorSurface {
 
   Column {
     id: layout
+    z: 1
     anchors.left: parent.left
     anchors.right: parent.right
     anchors.verticalCenter: parent.verticalCenter
@@ -187,9 +210,26 @@ CursorSurface {
       // ---------- primary control + expander ----------
       Row {
         id: controlSlot
+        z: 20
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.spacing.md
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          visible: row.barDataEligible
+          enabled: row.barDataEligible
+          opacity: row.barInBar || rowHover.hovered || row.barActionHovered
+            ? 1.0 : 0.0
+          size: Style.space(32)
+          iconText: row.barInBar ? "󰍴" : "󰐕"  // md-minus / md-plus
+          tooltipText: row.barInBar
+            ? "Remove from the bar" : "Add to the bar"
+          foreground: row.fg
+          fontFamily: row.family
+          onHovered: function(isHovered) { row.barActionHovered = isHovered }
+          onClicked: row.toggleBarData()
+        }
 
         Text {
           textFormat: Text.PlainText

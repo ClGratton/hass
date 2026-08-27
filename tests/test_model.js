@@ -138,17 +138,27 @@ section("room-reading classification", () => {
   eq("VOC index fallback recognizes an unambiguous unitless name",
      Model.environmentalReading(entity("sensor.air_voc_index", "250")).kind,
      "voc_index");
-  const ikea = { manufacturer: "IKEA of Sweden", model: "VINDSTYRKA E2112" };
-  eq("VINDSTYRKA uses the Sensirion VOC index bands",
-     Model.environmentalReading(
-       entity("sensor.air_voc_index", "251"), ikea).quality, "poor");
-  eq("VINDSTYRKA VOC index keeps all four documented levels",
-     [150, 151, 251, 401].map((value) => Model.environmentalReading(
-       entity("sensor.air_voc_index", String(value)), ikea).quality),
-     ["good", "moderate", "poor", "critical"]);
-  eq("another vendor's unitless VOC index stays neutral",
-     Model.environmentalReading(entity("sensor.air_voc_index", "251"), {
-       manufacturer: "Other", model: "Monitor"
+  const voc = (value) => entity("sensor.air_voc_index", String(value));
+  const vindstyrka = {
+    manufacturer: "IKEA of Sweden",
+    model: "VINDSTYRKA air quality and humidity sensor"
+  };
+  [[150, "good"], [151, "moderate"], [250, "moderate"],
+   [251, "poor"], [400, "poor"], [401, "critical"]].forEach(([value, quality]) => {
+    eq(`IKEA VOC index ${value} is ${quality}`,
+       Model.environmentalReading(voc(value), vindstyrka).quality, quality);
+  });
+  eq("IKEA's E2112 model number is recognized",
+     Model.environmentalReading(voc(251), {
+       manufacturer: "IKEA", model: "E2112"
+     }).quality, "poor");
+  eq("a generic VOC index does not inherit IKEA bands",
+     Model.environmentalReading(voc(401), {
+       manufacturer: "Other", model: "VINDSTYRKA"
+     }).quality, "neutral");
+  eq("another IKEA device does not inherit VINDSTYRKA bands",
+     Model.environmentalReading(voc(401), {
+       manufacturer: "IKEA", model: "STARKVIND"
      }).quality, "neutral");
   eq("battery is not treated as a room reading",
      Model.environmentalReading(entity("sensor.air_battery", "100", {
@@ -257,6 +267,32 @@ section("room-reading classification", () => {
        { kind: "voc", label: "VOC", value: "12 ppb" },
        { kind: "pm25", label: "PM2.5", value: "4 µg/m³" }
      ], 3), "24.7 °C · 46.9 % · CO₂ 407 ppm · +2");
+});
+
+section("bar data readings", () => {
+  const climate = entity("climate.office", "cool", {
+    current_temperature: 25, temperature: 25.5
+  });
+  eq("climate is eligible for a bar reading",
+     Model.barDataEligible(climate), true);
+  eq("lights are not data widgets",
+     Model.barDataEligible(entity("light.office", "on")), false);
+  eq("AC shows current and target temperatures",
+     Model.barDataReadings(climate, "°C"), [
+       { entityId: "climate.office", kind: "climate_current", label: "Current",
+         value: "25°C", quality: "neutral", order: 10 },
+       { entityId: "climate.office", kind: "climate_target", label: "Target",
+         value: "→ 25.5°C", quality: "neutral", order: 20 }
+     ]);
+  eq("an unavailable AC remains removable and identifiable",
+     Model.barDataReadings(entity("climate.office", "unavailable"), "°C"), [
+       { entityId: "climate.office", kind: "climate_state", label: "AC",
+         value: "Unavailable", quality: "unknown", order: 10 }
+     ]);
+  eq("an individual VINDSTYRKA VOC widget uses the device bands",
+     Model.barDataReadings(entity("sensor.air_voc_index", "151"), "", {
+       manufacturer: "IKEA of Sweden", model: "VINDSTYRKA"
+     })[0].quality, "moderate");
 });
 
 section("brightness", () => {

@@ -214,6 +214,59 @@ def test_rejected_service_call_is_reported():
         server.stop()
 
 
+def test_history_is_normalized():
+    print("history: numeric samples are bounded and normalized for QML")
+    server = FakeHA()
+    bridge = BridgeProc()
+    try:
+        bridge.send({"op": "config", "url": server.url, "token": "tok"})
+        bridge.wait_for(lambda e: e["ev"] == "phase" and e["phase"] == "connected")
+        bridge.send({
+            "op": "history", "tag": "history:test",
+            "entity_ids": ["sensor.air_temperature"],
+            "start_time": "2026-08-27T10:00:00.000Z",
+            "end_time": "2026-08-27T14:00:00.000Z",
+        })
+        event = bridge.wait_for(
+            lambda e: e["ev"] == "history" and e.get("tag") == "history:test")
+        sparse = (event or {}).get("histories", {}).get(
+            "sensor.air_temperature", [])
+        check("returns a held-state timeline for a sparse series",
+              len(sparse) == 360
+              and sparse[0]["v"] == 20.5
+              and sparse[-1]["v"] == 21.25
+              and all(point["v"] in (20.5, 21.25) for point in sparse),
+              {"count": len(sparse),
+               "first": sparse[0] if sparse else None,
+               "last": sparse[-1] if sparse else None})
+        request = server.history_requests[0] if server.history_requests else {}
+        check("uses Home Assistant's websocket history command",
+              request.get("type") == "history/history_during_period", request)
+        check("requests the compact no attribute response",
+              request.get("minimal_response") is True
+              and request.get("no_attributes") is True, request)
+
+        bridge.send({
+            "op": "history", "tag": "history:dense",
+            "entity_ids": ["sensor.dense_power"],
+            "start_time": "2026-08-27T10:00:00.000Z",
+            "end_time": "2026-08-27T14:00:00.000Z",
+        })
+        dense_event = bridge.wait_for(
+            lambda e: e["ev"] == "history" and e.get("tag") == "history:dense")
+        dense = (dense_event or {}).get("histories", {}).get("sensor.dense_power", [])
+        check("downsampling preserves held quiet states without extrema needles",
+              len(dense) <= 360
+              and sum(1 for point in dense if point["v"] == 0) >= 200
+              and max(point["v"] for point in dense) < 150,
+              {"count": len(dense),
+               "zeros": sum(1 for point in dense if point["v"] == 0),
+               "maximum": max(point["v"] for point in dense)})
+    finally:
+        bridge.stop()
+        server.stop()
+
+
 def test_auth_invalid_once_is_retried():
     print("auth: a single rejection is retried (Home Assistant restart)")
     server = FakeHA(auth_mode="invalid_once")
@@ -1056,6 +1109,7 @@ def test_history_timeout_is_reported():
 def main():
     for test in (test_live_happy_path,
                  test_rejected_service_call_is_reported,
+                 test_history_is_normalized,
                  test_reports_the_unit_system,
                  test_auth_invalid_once_is_retried,
                  test_auth_invalid_twice_stops,
