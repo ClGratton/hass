@@ -165,6 +165,10 @@ def main():
           'op: "history"' in function_block("requestHistory")
           and "root.callService(" not in function_block("requestHistory")
           and "historyGraph" in function_block("requestHistory"))
+    check("external history entity ids are validated before map access",
+          "EntityStore.validEntityId(entityId)" in function_block("handleHistory")
+          and "EntityStore.validEntityId(entity.entity_id)"
+          in function_block("appendHistoryPoint"))
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)

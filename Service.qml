@@ -653,7 +653,7 @@ QtObject {
 
   function handleHistory(event) {
     var entityId = String(event.entity_id || "")
-    if (!entityId) return
+    if (!EntityStore.validEntityId(entityId)) return
     var tag = String(event.tag || "")
     var pendingTag = root.pendingHistoryTags[entityId] || ""
     if (pendingTag && tag && tag !== pendingTag) return
@@ -677,8 +677,9 @@ QtObject {
   }
 
   function appendHistoryPoint(entity) {
-    if (!entity || !entity.entity_id) return
-    var entry = root.historyByEntity[entity.entity_id]
+    if (!entity || !EntityStore.validEntityId(entity.entity_id)) return
+    var entityId = entity.entity_id
+    var entry = root.historyByEntity[entityId]
     if (!entry || entry.loading) return
     var value = Model.parseNumericState(entity.state)
     if (value === null) return
@@ -687,8 +688,8 @@ QtObject {
     var existing = entry.points || []
     var points = existing.slice()
     points.push({ t: now, v: value })
-    root.historyByEntity[entity.entity_id] = {
-      entityId: entity.entity_id,
+    root.historyByEntity[entityId] = {
+      entityId: entityId,
       hours: hours,
       points: Model.clampHistoryPoints(
         points, hours, now, Model.HISTORY_MAX_POINTS),

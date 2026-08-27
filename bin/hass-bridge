@@ -112,7 +112,6 @@ WS_SCHEMES = {"https": "wss", "http": "ws", "wss": "wss", "ws": "ws"}
 # How long we wait for Home Assistant to answer a request before giving the
 # shell its error back.
 REQUEST_TIMEOUT = 5.0
-HISTORY_TIMEOUT = 20.0
 MAX_HISTORY_ENTITIES = 8
 MAX_HISTORY_POINTS = 360
 # Recorder history can be slow on modest hardware or long windows; keep that
@@ -1115,7 +1114,8 @@ class Bridge:
             "minimal_response": True,
             "no_attributes": True,
         }
-        self.request("history", payload, tag=tag, timeout=HISTORY_TIMEOUT,
+        self.request("history", payload, tag=tag,
+                     timeout=HISTORY_REQUEST_TIMEOUT,
                      batch=entity_ids, context=context)
 
     # -- request plumbing --------------------------------------------------
@@ -1575,7 +1575,8 @@ class Bridge:
     @staticmethod
     def history_time_ms(value):
         try:
-            return round(datetime.fromisoformat(str(value)).timestamp() * 1000)
+            text = str(value).replace("Z", "+00:00")
+            return round(datetime.fromisoformat(text).timestamp() * 1000)
         except (TypeError, ValueError, OverflowError):
             return None
 
