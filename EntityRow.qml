@@ -39,7 +39,6 @@ CursorSurface {
 
   property bool expanded: false
   property bool barActionHovered: false
-  property bool pinActionHovered: false
   property int expandedControlCursorIndex: -1
   readonly property int expandedControlCount: (row.domain === "climate"
     || row.domain === "sensor")
@@ -63,8 +62,10 @@ CursorSurface {
   readonly property bool entityPinned: !row.roomReading && row.hass !== null
     && row.hass.isEntityPinned(row.entityId)
   readonly property bool pinned: row.roomPinned || row.entityPinned
+  readonly property bool pinPreview: row.expandable
+    && (row.entityPinned || rowHover.hovered)
   readonly property bool panelActionsVisible: row.pinned || rowHover.hovered
-    || row.pinActionHovered || row.barActionHovered
+    || row.barActionHovered
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
   readonly property bool barDataEligible: !row.roomReading
@@ -179,9 +180,12 @@ CursorSurface {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         visible: row.showIcon
-        width: row.showIcon ? implicitWidth : 0
-        text: row.icon
-        color: row.available && row.isOn ? row.fg : row.inactive
+        width: row.showIcon ? Style.space(22) : 0
+        horizontalAlignment: Text.AlignHCenter
+        text: row.pinPreview ? "" : row.icon   // Font Awesome thumb tack
+        color: row.entityPinned ? Color.accent
+          : (row.pinPreview ? row.dim
+            : (row.available && row.isOn ? row.fg : row.inactive))
         font.family: row.family
         font.pixelSize: Style.font.heading
       }
@@ -194,8 +198,8 @@ CursorSurface {
         radius: Style.cornerRadius
         color: row.entityPinned
           ? Style.selectedFillFor(row.fg, Color.accent)
-          : (row.pinActionHovered
-            ? Style.hoverFillFor(row.fg, Color.accent) : "transparent")
+          : (row.expandable && rowHover.hovered
+            ? Style.hoverFillFor(row.fg, row.dim) : "transparent")
         borderSpec: row.entityPinned
           ? Border.controlSpec("selected", row.fg, Color.accent) : Border.none()
       }
@@ -209,7 +213,6 @@ CursorSurface {
         enabled: row.expandable
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onContainsMouseChanged: row.pinActionHovered = containsMouse
         onClicked: row.hass.toggleEntityPinned(row.entityId)
       }
 

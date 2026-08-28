@@ -158,12 +158,20 @@ check("id: glyph" in room_card
       "room icon is not the selected pin button")
 check("readonly property bool panelActionsVisible" in entity_row
       and "opacity: row.barInBar ? 1.0" in entity_row
-      and "row.pinActionHovered || row.barActionHovered" in entity_row,
-      "entity bar action does not follow icon hover or pinned state")
+      and "rowHover.hovered" in entity_row
+      and "row.barActionHovered" in entity_row,
+      "entity bar action does not follow row hover or pinned state")
 check("readonly property bool panelActionsVisible" in room_card
       and "opacity: roomBarSlot.added ? 1.0" in room_card
-      and "card.pinActionHovered || card.barActionHovered" in room_card,
-      "room bar action does not follow icon hover or pinned state")
+      and "cardHover.hovered" in room_card
+      and "card.barActionHovered" in room_card,
+      "room bar action does not follow row hover or pinned state")
+check("row.entityPinned || rowHover.hovered" in entity_row
+      and 'text: row.pinPreview ? "" : row.icon' in entity_row,
+      "entity icon does not morph into a stationary pin on row hover")
+check("card.pinned || cardHover.hovered" in room_card
+      and 'text: card.pinPreview' in room_card,
+      "room icon does not morph into a stationary pin on row hover")
 check("anchors.left: entityPrimarySlot.right" in entity_row
       and "anchors.right: entityExpandSlot.left" in entity_row
       and "id: entityExpandSlot\n          anchors.right: parent.right" in entity_row,
