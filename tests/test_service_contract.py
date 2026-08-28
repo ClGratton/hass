@@ -46,6 +46,9 @@ def function_block(name):
 
 def main():
     print("service: credential and connection lifecycle invariants")
+    method_names = re.findall(r"\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", service)
+    check("the QML service has no duplicate method names",
+          len(method_names) == len(set(method_names)))
     current_config = function_block("currentConfig")
     check("config serialization never contains a token",
           "token" not in current_config.lower())
@@ -162,8 +165,8 @@ def main():
           "controlPending: !!(" in room_projection
           and ') || ""' in room_projection)
     check("history is a tagged bridge op, not a Home Assistant service call",
-          'op: "history"' in function_block("requestHistory")
-          and "root.callService(" not in function_block("requestHistory")
+          'op: "history"' in function_block("requestHistoryBatch")
+          and "root.callService(" not in function_block("requestHistoryBatch")
           and "historyGraph" in function_block("requestHistory"))
     check("external history entity ids are validated before map access",
           "EntityStore.validEntityId(entityId)" in function_block("handleHistory")

@@ -848,7 +848,7 @@ QtObject {
                       real startMs, real endMs)
   property int historySequence: 0
 
-  function requestHistory(entityIds, hours) {
+  function requestHistoryBatch(entityIds, hours) {
     if (!Array.isArray(entityIds) || entityIds.length === 0) return ""
     var unique = []
     for (var i = 0; i < entityIds.length && unique.length < 8; i++) {
