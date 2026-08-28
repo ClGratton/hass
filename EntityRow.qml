@@ -39,6 +39,7 @@ CursorSurface {
 
   property bool expanded: false
   property bool barActionHovered: false
+  property bool pinActionHovered: false
   property int expandedControlCursorIndex: -1
   readonly property int expandedControlCount: (row.domain === "climate"
     || row.domain === "sensor")
@@ -62,6 +63,8 @@ CursorSurface {
   readonly property bool entityPinned: !row.roomReading && row.hass !== null
     && row.hass.isEntityPinned(row.entityId)
   readonly property bool pinned: row.roomPinned || row.entityPinned
+  readonly property bool panelActionsVisible: row.pinned || rowHover.hovered
+    || row.pinActionHovered || row.barActionHovered
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
   readonly property bool barDataEligible: !row.roomReading
@@ -172,6 +175,7 @@ CursorSurface {
       Text {
         textFormat: Text.PlainText
         id: glyph
+        z: 30
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         visible: row.showIcon
@@ -182,10 +186,43 @@ CursorSurface {
         font.pixelSize: Style.font.heading
       }
 
+      BorderSurface {
+        z: 29
+        anchors.centerIn: glyph
+        width: Style.space(22)
+        height: Style.space(22)
+        radius: Style.cornerRadius
+        color: row.entityPinned
+          ? Style.selectedFillFor(row.fg, Color.accent)
+          : (row.pinActionHovered
+            ? Style.hoverFillFor(row.fg, Color.accent) : "transparent")
+        borderSpec: row.entityPinned
+          ? Border.controlSpec("selected", row.fg, Color.accent) : Border.none()
+      }
+
+      MouseArea {
+        id: glyphPinMouse
+        z: 31
+        anchors.centerIn: glyph
+        width: Style.space(22)
+        height: Style.space(22)
+        enabled: row.expandable
+        hoverEnabled: true
+        cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+        onContainsMouseChanged: row.pinActionHovered = containsMouse
+        onClicked: row.hass.toggleEntityPinned(row.entityId)
+      }
+
+      PanelToolTip {
+        visible: glyphPinMouse.containsMouse
+        text: row.entityPinned ? "Unpin expanded view" : "Pin expanded view"
+        fontFamily: row.family
+      }
+
       Column {
         id: labels
         anchors.left: glyph.right
-        anchors.leftMargin: row.showIcon ? Style.spacing.xl : 0
+        anchors.leftMargin: row.showIcon ? Style.spacing.xl : Style.spacing.sm
         anchors.right: controlSlot.left
         anchors.rightMargin: Style.spacing.lg
         anchors.verticalCenter: parent.verticalCenter
@@ -219,37 +256,33 @@ CursorSurface {
         z: 20
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(24 + 64 + 22 + 32) + Style.spacing.md * 3
+        width: Style.space(54 + 22 + 22) + Style.spacing.sm * 2
         height: Style.space(32)
+        readonly property real chevronInkLeft: entityExpandSlot.x
+          + (entityExpandSlot.width - entityChevronMetrics.advanceWidth) / 2
+          + entityChevronMetrics.tightBoundingRect.x
+        readonly property real barInkTarget: ((entityPrimarySlot.x
+          + entityPrimarySlot.width) + chevronInkLeft) / 2
 
-        Item {
-          id: entityPinSlot
-          anchors.left: parent.left
-          anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(24)
-          height: Style.space(32)
+        TextMetrics {
+          id: entityBarMetrics
+          font.family: row.family
+          font.pixelSize: Style.font.icon
+          text: row.barInBar ? "−" : "+"
+        }
 
-          PanelActionButton {
-            anchors.centerIn: parent
-            visible: !row.roomReading && row.expandable
-            enabled: visible
-            iconText: ""                     // Font Awesome thumb tack
-            tooltipText: row.entityPinned
-              ? "Unpin expanded view" : "Keep expanded when the panel opens"
-            foreground: row.entityPinned ? row.fg : row.dim
-            fontFamily: row.family
-            size: Style.space(24)
-            bordered: row.entityPinned
-            onClicked: row.hass.toggleEntityPinned(row.entityId)
-          }
+        TextMetrics {
+          id: entityChevronMetrics
+          font.family: row.family
+          font.pixelSize: Style.font.icon
+          text: row.expanded ? "󰅃" : "󰅀"
         }
 
         Item {
           id: entityPrimarySlot
-          anchors.left: entityPinSlot.right
-          anchors.leftMargin: Style.spacing.md
+          anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(64)
+          width: Style.space(54)
           height: Style.space(32)
 
           Text {
@@ -261,7 +294,7 @@ CursorSurface {
             color: row.dim
             font.family: row.family
             font.pixelSize: Style.font.caption
-            font.bold: true
+            font.bold: false
           }
 
           Text {
@@ -293,9 +326,36 @@ CursorSurface {
         }
 
         Item {
-          id: entityExpandSlot
+          id: entityBarSlot
           anchors.left: entityPrimarySlot.right
-          anchors.leftMargin: Style.spacing.md
+          anchors.right: entityExpandSlot.left
+          anchors.verticalCenter: parent.verticalCenter
+          height: Style.space(32)
+
+          PanelActionButton {
+            anchors.verticalCenter: parent.verticalCenter
+            x: controlSlot.barInkTarget - entityBarSlot.x - width / 2
+              - (entityBarMetrics.tightBoundingRect.x
+                + entityBarMetrics.tightBoundingRect.width / 2
+                - entityBarMetrics.advanceWidth / 2)
+            visible: row.barDataEligible
+            opacity: row.barInBar ? 1.0
+              : (row.panelActionsVisible ? 1.0 : 0.24)
+            size: Style.space(20)
+            iconText: row.barInBar ? "−" : "+"
+            tooltipText: row.barInBar
+              ? "Remove from the bar" : "Add to the bar"
+            foreground: row.barInBar ? Color.accent : row.fg
+            hoverColor: row.barInBar ? Color.accent : row.fg
+            fontFamily: row.family
+            onHovered: function(isHovered) { row.barActionHovered = isHovered }
+            onClicked: row.toggleBarData()
+          }
+        }
+
+        Item {
+          id: entityExpandSlot
+          anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
           width: Style.space(22)
           height: Style.space(32)
@@ -312,30 +372,6 @@ CursorSurface {
             foreground: row.dim
             fontFamily: row.family
             onClicked: row.expandToggled()
-          }
-        }
-
-        Item {
-          id: entityBarSlot
-          anchors.left: entityExpandSlot.right
-          anchors.leftMargin: Style.spacing.md
-          anchors.verticalCenter: parent.verticalCenter
-          width: Style.space(32)
-          height: Style.space(32)
-
-          PanelActionButton {
-            anchors.fill: parent
-            visible: row.barDataEligible
-            opacity: row.barInBar || rowHover.hovered || row.barActionHovered
-              ? 1.0 : 0.0
-            size: parent.width
-            iconText: row.barInBar ? "󰍴" : "󰐕" // md-minus / md-plus
-            tooltipText: row.barInBar
-              ? "Remove from the bar" : "Add to the bar"
-            foreground: row.fg
-            fontFamily: row.family
-            onHovered: function(isHovered) { row.barActionHovered = isHovered }
-            onClicked: row.toggleBarData()
           }
         }
       }

@@ -134,18 +134,59 @@ check("barConfigSerial" in entity_row and "barConfigRevision" in entity_row,
       "entity bar state does not track the live layout revision")
 check("barConfigSerial" in room_card and "barConfigRevision" in room_card,
       "room bar state does not track the live layout revision")
-check("id: roomBarSlot" in room_card and "opacity: roomBarSlot.added" in room_card,
+check("id: roomBarSlot" in room_card and "panelActionsVisible" in room_card,
       "room bar action has no permanent geometry slot")
-check(entity_row.index("id: entityPinSlot")
+check(entity_row.index("id: glyph")
+      < entity_row.index("id: labels")
       < entity_row.index("id: entityPrimarySlot")
-      < entity_row.index("id: entityExpandSlot")
-      < entity_row.index("id: entityBarSlot"),
-      "entity actions are not pin, primary, chevron, bar")
-check(room_card.index("id: roomPinSlot")
+      < entity_row.index("id: entityBarSlot")
+      < entity_row.index("id: entityExpandSlot"),
+      "entity controls are not pin, name, primary, bar, chevron")
+check(room_card.index("id: glyph")
+      < room_card.index("id: headerLabels")
       < room_card.index("id: roomPrimarySlot")
-      < room_card.index("id: roomExpandSlot")
-      < room_card.index("id: roomBarSlot"),
-      "room actions are not pin, primary, chevron, bar")
+      < room_card.index("id: roomBarSlot")
+      < room_card.index("id: roomExpandSlot"),
+      "room controls are not pin, name, primary, bar, chevron")
+check("id: glyph" in entity_row
+      and "onClicked: row.hass.toggleEntityPinned" in entity_row
+      and "Style.selectedFillFor(row.fg, Color.accent)" in entity_row,
+      "entity icon is not the selected pin button")
+check("id: glyph" in room_card
+      and "onClicked: card.pinRequested()" in room_card
+      and "Style.selectedFillFor(card.fg, Color.accent)" in room_card,
+      "room icon is not the selected pin button")
+check("readonly property bool panelActionsVisible" in entity_row
+      and "opacity: row.barInBar ? 1.0" in entity_row
+      and "row.pinActionHovered || row.barActionHovered" in entity_row,
+      "entity bar action does not follow icon hover or pinned state")
+check("readonly property bool panelActionsVisible" in room_card
+      and "opacity: roomBarSlot.added ? 1.0" in room_card
+      and "card.pinActionHovered || card.barActionHovered" in room_card,
+      "room bar action does not follow icon hover or pinned state")
+check("anchors.left: entityPrimarySlot.right" in entity_row
+      and "anchors.right: entityExpandSlot.left" in entity_row
+      and "id: entityExpandSlot\n          anchors.right: parent.right" in entity_row,
+      "entity bar action is not centered between primary and chevron slots")
+check("anchors.left: roomPrimarySlot.right" in room_card
+      and "anchors.right: roomExpandSlot.left" in room_card
+      and "id: roomExpandSlot\n        anchors.right: parent.right" in room_card,
+      "room bar action is not centered between primary and chevron slots")
+check(entity_row.count("TextMetrics {") >= 2
+      and "readonly property real chevronInkLeft" in entity_row
+      and "readonly property real barInkTarget" in entity_row
+      and "entityBarMetrics.tightBoundingRect" in entity_row,
+      "entity action centering does not measure rendered glyph ink")
+check(room_card.count("TextMetrics {") >= 2
+      and "readonly property real chevronInkLeft" in room_card
+      and "readonly property real barInkTarget" in room_card
+      and "roomBarMetrics.tightBoundingRect" in room_card,
+      "room action centering does not measure rendered glyph ink")
+check("foreground: row.barInBar ? Color.accent : row.fg" in entity_row,
+      "entity remove action does not use the theme accent")
+check("foreground: roomBarSlot.added ? Color.accent : card.fg" in room_card
+      and "foreground: metric.added ? Color.accent : metric.qualityColor" in room_card,
+      "room remove actions do not use the theme accent")
 check("Row {\n        id: controlSlot" not in entity_row
       and "Row {\n      id: headerActions" not in room_card,
       "action slots still depend on a positioner")

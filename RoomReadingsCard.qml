@@ -17,6 +17,7 @@ Item {
   property bool rowHovered: false
   property bool showIcon: true
   property bool showPanelPinOnHover: false
+  property bool barActionHovered: false
 
   signal expansionRequested()
   signal pinRequested()
@@ -26,6 +27,8 @@ Item {
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property bool pinPreview: card.showPanelPinOnHover
     && card.showIcon && card.rowHovered
+  readonly property bool panelActionsVisible: card.rowHovered
+    || card.barActionHovered
   readonly property int barConfigRevision: bar
     && bar.barConfigSerial !== undefined ? bar.barConfigSerial : 0
   readonly property var liveShellConfig: {
@@ -66,6 +69,7 @@ Item {
     Text {
       textFormat: Text.PlainText
       id: glyph
+      z: 30
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       visible: card.showIcon
@@ -160,14 +164,33 @@ Item {
       id: headerActions
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(64 + 22 + 32) + Style.spacing.md * 2
+      width: Style.space(54 + 22 + 22) + Style.spacing.sm * 2
       height: Style.space(32)
+      readonly property real chevronInkLeft: roomExpandSlot.x
+        + (roomExpandSlot.width - roomChevronMetrics.advanceWidth) / 2
+        + roomChevronMetrics.tightBoundingRect.x
+      readonly property real barInkTarget: ((roomPrimarySlot.x
+        + roomPrimarySlot.width) + chevronInkLeft) / 2
+
+      TextMetrics {
+        id: roomBarMetrics
+        font.family: card.family
+        font.pixelSize: Style.font.icon
+        text: roomBarSlot.added ? "−" : "+"
+      }
+
+      TextMetrics {
+        id: roomChevronMetrics
+        font.family: card.family
+        font.pixelSize: Style.font.icon
+        text: card.expanded ? "󰅃" : "󰅀"
+      }
 
       Item {
         id: roomPrimarySlot
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(64)
+        width: Style.space(54)
         height: Style.space(32)
 
         ToggleSwitch {
@@ -187,9 +210,38 @@ Item {
       }
 
       Item {
-        id: roomExpandSlot
+        id: roomBarSlot
+        readonly property var entry: BarData.roomEntry(card.deviceId)
+        readonly property bool added: card.inBar(entry)
         anchors.left: roomPrimarySlot.right
-        anchors.leftMargin: Style.spacing.md
+        anchors.right: roomExpandSlot.left
+        anchors.verticalCenter: parent.verticalCenter
+        height: Style.space(32)
+
+        PanelActionButton {
+          anchors.verticalCenter: parent.verticalCenter
+          x: headerActions.barInkTarget - roomBarSlot.x - width / 2
+            - (roomBarMetrics.tightBoundingRect.x
+              + roomBarMetrics.tightBoundingRect.width / 2
+              - roomBarMetrics.advanceWidth / 2)
+          visible: card.cardData.readings.length >= 2
+          opacity: roomBarSlot.added ? 1.0
+            : (card.panelActionsVisible ? 1.0 : 0.24)
+          size: Style.space(20)
+          iconText: roomBarSlot.added ? "−" : "+"
+          tooltipText: roomBarSlot.added
+            ? "Remove room readings from the bar" : "Add room readings to the bar"
+          foreground: roomBarSlot.added ? Color.accent : card.fg
+          hoverColor: roomBarSlot.added ? Color.accent : card.fg
+          fontFamily: card.family
+          onHovered: function(isHovered) { card.barActionHovered = isHovered }
+          onClicked: card.toggleBar(roomBarSlot.entry)
+        }
+      }
+
+      Item {
+        id: roomExpandSlot
+        anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         width: Style.space(22)
         height: Style.space(32)
@@ -201,30 +253,6 @@ Item {
           foreground: card.dim
           fontFamily: card.family
           onClicked: card.expansionRequested()
-        }
-      }
-
-      Item {
-        id: roomBarSlot
-        readonly property var entry: BarData.roomEntry(card.deviceId)
-        readonly property bool added: card.inBar(entry)
-        anchors.left: roomExpandSlot.right
-        anchors.leftMargin: Style.spacing.md
-        anchors.verticalCenter: parent.verticalCenter
-        width: Style.space(32)
-        height: Style.space(32)
-
-        PanelActionButton {
-          anchors.fill: parent
-          visible: card.cardData.readings.length >= 2
-          opacity: roomBarSlot.added || cardHover.hovered ? 1.0 : 0.0
-          size: parent.width
-          iconText: roomBarSlot.added ? "󰍴" : "󰐕" // md-minus / md-plus
-          tooltipText: roomBarSlot.added
-            ? "Remove room readings from the bar" : "Add room readings to the bar"
-          foreground: card.fg
-          fontFamily: card.family
-          onClicked: card.toggleBar(roomBarSlot.entry)
         }
       }
     }
@@ -307,11 +335,12 @@ Item {
           anchors.right: parent.right
           anchors.margins: Style.spacing.xxs
           visible: metricHover.hovered
-          iconText: metric.added ? "󰍴" : "󰐕"  // md-minus / md-plus
+          iconText: metric.added ? "−" : "+"
           tooltipText: metric.added
             ? "Remove " + metric.reading.label + " from the bar"
             : "Add " + metric.reading.label + " to the bar"
-          foreground: metric.qualityColor
+          foreground: metric.added ? Color.accent : metric.qualityColor
+          hoverColor: metric.added ? Color.accent : metric.qualityColor
           fontFamily: card.family
           size: Style.space(20)
           onClicked: card.toggleBar(metric.entry)
