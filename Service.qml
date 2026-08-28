@@ -1074,7 +1074,7 @@ QtObject {
     var iconEntityId = readings.length ? readings[0].entityId : ""
     var iconEntity = iconEntityId ? root.states[iconEntityId] : null
     var areaId = root.deviceArea[deviceId]
-      || (entityIds.length ? root.entityArea[entityIds[0]] : "")
+      || (entityIds.length ? root.entityArea[entityIds[0]] : "") || ""
     return {
       deviceId: deviceId,
       name: root.deviceDisplayName(deviceId, entityIds),
@@ -1089,8 +1089,8 @@ QtObject {
       summary: Model.roomReadingSummary(readings, 3),
       controlEntityId: controlEntityId,
       controlOn: controlEntityId ? root.displayIsOn(controlEntityId) : false,
-      controlPending: controlEntityId
-        && root.pendingToggles[controlEntityId] !== undefined,
+      controlPending: !!(controlEntityId
+        && root.pendingToggles[controlEntityId] !== undefined),
       available: readings.length > 0
     }
   }

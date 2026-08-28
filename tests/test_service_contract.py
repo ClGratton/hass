@@ -157,6 +157,10 @@ def main():
           and "root.pendingToggleRevision++" in function_block("setPendingToggle")
           and "root.pendingToggleRevision++" in function_block("clearPendingToggle")
           and "hass.pendingToggleRevision" in room_card)
+    room_projection = function_block("roomReadingCard")
+    check("room card ListModel roles keep stable primitive types",
+          "controlPending: !!(" in room_projection
+          and ') || ""' in room_projection)
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)
