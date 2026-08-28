@@ -124,40 +124,71 @@ function badgeText(entity) {
 // ---------------------------------------------------------------- room readings
 
 function environmentalKind(entity) {
-  if (domain(entity) !== "sensor" && domain(entity) !== "binary_sensor") return ""
+  if (domain(entity) !== "sensor") return ""
   var a = attrs(entity)
   var deviceClass = cleaned(a.device_class).toLowerCase()
+  // Home Assistant's SensorDeviceClass values are the canonical metadata.
+  // A declared but unrelated class must never be reinterpreted from its name
+  // or unit (battery percentage is the common failure mode).
   var byClass = {
     temperature: "temperature", humidity: "humidity", pm1: "pm1",
     pm25: "pm25", pm10: "pm10",
     volatile_organic_compounds: "voc",
     volatile_organic_compounds_parts: "voc",
     carbon_dioxide: "co2", carbon_monoxide: "co",
-    air_quality_index: "aqi", atmospheric_pressure: "pressure",
+    aqi: "aqi", atmospheric_pressure: "pressure",
     illuminance: "illuminance"
   }
   if (byClass[deviceClass]) return byClass[deviceClass]
   if (deviceClass) return ""
 
-  var unit = cleaned(a.unit_of_measurement).toLowerCase().replace(/\s+/g, "")
-  var haystack = (name(entity) + " "
-    + String(entity ? entity.entity_id : "")).toLowerCase()
-  if (unit === "°c" || unit === "°f" || unit === "k") return "temperature"
-  if (unit === "%") return "humidity"
-  if (unit === "lx") return "illuminance"
-  if (/^(pa|hpa|kpa|mbar|bar|inhg|mmhg)$/.test(unit)) return "pressure"
-  if (haystack.indexOf("pm2.5") !== -1 || haystack.indexOf("pm2_5") !== -1
-      || /(?:^|[ _.])pm25(?:$|[ _.])/.test(haystack)) return "pm25"
-  if (/(?:^|[ _.])pm1(?:$|[ _.])/.test(haystack)) return "pm1"
-  if (/(?:^|[ _.])pm10(?:$|[ _.])/.test(haystack)) return "pm10"
-  if (/(?:^|[ _.])voc(?:$|[ _.])/.test(haystack)
-      && haystack.indexOf("index") !== -1) return "voc_index"
-  if (haystack.indexOf("volatile organic") !== -1
-      || /(?:^|[ _.])voc(?:$|[ _.])/.test(haystack)) return "voc"
-  if (/(?:^|[ _.])co2(?:$|[ _.])/.test(haystack)) return "co2"
-  if (haystack.indexOf("carbon monoxide") !== -1) return "co"
-  if (haystack.indexOf("air quality") !== -1) return "aqi"
+  // A unit alone is not identity. Classless CPU, memory, storage and battery
+  // sensors all legitimately use %, so every fallback also requires a clear,
+  // entity-specific name. Only the entity state name and entity_id are used;
+  // the shared device name is deliberately excluded.
+  var unit = environmentalUnit(entity)
+  var haystack = environmentalName(entity)
+  var temperatureUnit = /^(°c|°f|k)$/i.test(unit)
+  var massUnit = /^(ug\/m3|mg\/m3)$/.test(unit)
+  var gasUnit = /^(ppm|ppb|ug\/m3|mg\/m3)$/.test(unit)
+  if (temperatureUnit
+      && /\b(temperature|temp|dew point|heat index|feels like)\b/.test(haystack))
+    return "temperature"
+  if (unit === "%" && /\b(humidity|relative humidity|rh)\b/.test(haystack))
+    return "humidity"
+  if (/^(lx|lux)$/.test(unit)
+      && /\b(illuminance|lux|light level)\b/.test(haystack))
+    return "illuminance"
+  if (/^(pa|hpa|kpa|mbar|bar|inhg|mmhg)$/.test(unit)
+      && /\b(pressure|barometer|barometric)\b/.test(haystack))
+    return "pressure"
+  if (massUnit && /\b(pm2[ .]?5|pm25)\b/.test(haystack)) return "pm25"
+  if (massUnit && /\bpm10\b/.test(haystack)) return "pm10"
+  if (massUnit && /\bpm1\b/.test(haystack)) return "pm1"
+  if (/\b(voc|tvoc|volatile organic compounds?)\b/.test(haystack)
+      && /\bindex\b/.test(haystack) && (!unit || unit === "index"))
+    return "voc_index"
+  if (/\b(voc|tvoc|volatile organic compounds?)\b/.test(haystack)
+      && massUnit) return "voc"
+  if (/\b(co2|carbon dioxide)\b/.test(haystack) && gasUnit) return "co2"
+  if (/\b(carbon monoxide|co)\b/.test(haystack) && gasUnit) return "co"
+  if (/\b(aqi|air quality index)\b/.test(haystack) && (!unit || unit === "index"))
+    return "aqi"
   return ""
+}
+
+function environmentalName(entity) {
+  var a = attrs(entity)
+  var entityId = String(entity && entity.entity_id || "")
+  var objectId = entityId.split(".").slice(1).join(" ")
+  return (cleaned(a.friendly_name) + " " + objectId).toLowerCase()
+    .replace(/[_-]+/g, " ")
+}
+
+function environmentalUnit(entity) {
+  return cleaned(attrs(entity).unit_of_measurement).toLowerCase()
+    .replace(/\s+/g, "").replace(/[µμ]/g, "u")
+    .replace(/³/g, "3").replace(/²/g, "2")
 }
 
 var ENVIRONMENTAL_LABELS = {
@@ -172,13 +203,37 @@ var ENVIRONMENTAL_ORDER = {
   pm1: 50, pm25: 60, pm10: 70, aqi: 80, pressure: 90, illuminance: 100
 }
 
-function environmentalQuality(kind, state) {
+function isIkeaVindstyrka(device) {
+  var manufacturer = cleaned(device && device.manufacturer).toLowerCase()
+  var model = cleaned(device && device.model).toLowerCase()
+  return manufacturer.indexOf("ikea") !== -1
+    && (model.indexOf("vindstyrka") !== -1
+      || /(?:^|[^a-z0-9])e2112(?:$|[^a-z0-9])/.test(model))
+}
+
+function environmentalQuality(kind, state, unit, device) {
   var value = Number(state)
   if (!isFinite(value)) return "unknown"
   var bands = null
+  var normalizedUnit = String(unit || "").toLowerCase().replace(/\s+/g, "")
+    .replace(/[µμ]/g, "u").replace(/³/g, "3")
+  if (kind === "pm25" || kind === "pm10" || kind === "voc") {
+    if (normalizedUnit === "mg/m3") value *= 1000
+    else if (normalizedUnit !== "ug/m3") return "neutral"
+  } else if (kind === "co2" || kind === "co") {
+    if (normalizedUnit === "ppb") value /= 1000
+    else if (normalizedUnit !== "ppm") return "neutral"
+  } else if (kind === "aqi" || kind === "voc_index") {
+    if (normalizedUnit && normalizedUnit !== "index") return "neutral"
+  }
   if (kind === "pm25") bands = [5, 15, 35]
   else if (kind === "pm10") bands = [15, 45, 75]
-  else if (kind === "voc_index") bands = [100, 200, 300]
+  // VINDSTYRKA contains a Sensirion SEN54. Its unitless VOC Index uses the
+  // manufacturer's purifier mapping: 1–150, 150–250, 250–400, 400–500.
+  // Keep this device-specific: another integration's index may mean something
+  // different even when Home Assistant gives it a similar display name.
+  else if (kind === "voc_index" && isIkeaVindstyrka(device))
+    bands = [150, 250, 400]
   else if (kind === "voc") bands = [220, 660, 2200]
   else if (kind === "co2") bands = [800, 1200, 2000]
   else if (kind === "co") bands = [4, 9, 35]
@@ -190,18 +245,54 @@ function environmentalQuality(kind, state) {
   return "critical"
 }
 
-function environmentalReading(entity) {
+function environmentalReading(entity, device) {
   var kind = environmentalKind(entity)
   if (!kind) return null
+  var sourceLabel = name(entity)
+  var unit = environmentalUnit(entity)
   return {
     entityId: String(entity.entity_id || ""),
     kind: kind,
     label: ENVIRONMENTAL_LABELS[kind] || name(entity),
+    sourceLabel: sourceLabel,
     value: displayState(entity),
     quality: isUnavailable(entity) ? "unknown"
-      : environmentalQuality(kind, stateOf(entity)),
+      : environmentalQuality(kind, stateOf(entity), unit, device),
     order: ENVIRONMENTAL_ORDER[kind] || 999
   }
+}
+
+function distinguishEnvironmentalReadings(readings) {
+  var list = Array.isArray(readings) ? readings : []
+  var counts = Object.create(null)
+  var sourceCounts = Object.create(null)
+  for (var i = 0; i < list.length; i++) {
+    var kind = String(list[i] && list[i].kind || "")
+    counts[kind] = (counts[kind] || 0) + 1
+    var sourceKey = kind + "\u0000" + String(list[i] && list[i].sourceLabel || "")
+    sourceCounts[sourceKey] = (sourceCounts[sourceKey] || 0) + 1
+  }
+  var out = []
+  for (var n = 0; n < list.length; n++) {
+    var reading = list[n]
+    if (!reading) continue
+    var sourceLabel = reading.sourceLabel || reading.entityId
+    var duplicateSource = sourceCounts[String(reading.kind) + "\u0000"
+      + String(reading.sourceLabel || "")] > 1
+    var objectId = String(reading.entityId || "").split(".").slice(1).join(".")
+    out.push({
+      entityId: reading.entityId,
+      kind: reading.kind,
+      label: counts[reading.kind] > 1
+        ? sourceLabel + (duplicateSource && objectId ? " (" + objectId + ")" : "")
+        : reading.label,
+      sourceLabel: reading.sourceLabel,
+      value: reading.value,
+      quality: reading.quality,
+      order: reading.order
+    })
+  }
+  return out
 }
 
 function normalizedControlName(value) {
@@ -1206,6 +1297,29 @@ function activitySummary(entities) {
   else if (playingCount > 1) parts.push(playingCount + " playing")
 
   return parts.length ? parts.join(" · ") : "All off"
+}
+
+function panelActivityEntities(favoriteIds, roomCards, states) {
+  var entities = states && typeof states === "object" ? states : {}
+  var favorites = Array.isArray(favoriteIds) ? favoriteIds : []
+  var cards = Array.isArray(roomCards) ? roomCards : []
+  var seen = Object.create(null)
+  var picked = []
+
+  function add(entityId) {
+    var id = String(entityId || "")
+    if (!id || seen[id] || !entities[id]) return
+    seen[id] = true
+    picked.push(entities[id])
+  }
+
+  for (var i = 0; i < favorites.length; i++) add(favorites[i])
+  for (var n = 0; n < cards.length; n++) {
+    var card = cards[n] || {}
+    if (card.controlEntityId) add(card.controlEntityId)
+    else if (card.readings && card.readings.length) add(card.readings[0].entityId)
+  }
+  return picked
 }
 
 // Settings browser buckets. No "Cameras" until cameras ship.

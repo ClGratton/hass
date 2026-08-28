@@ -95,6 +95,17 @@ card for temperature, humidity, particulate matter, VOC, carbon dioxide and
 other available readings. Individual sensor entities remain available in the
 other categories and can still be starred separately.
 
+Classification follows Home Assistant's documented
+[`SensorDeviceClass`](https://developers.home-assistant.io/docs/core/entity/sensor/)
+metadata first. A classless sensor is included only when both its entity name
+and unit identify the same environmental measurement, so generic percentage
+sensors such as CPU, memory and storage are not mistaken for humidity. Quality
+bands are display policy rather than Home Assistant metadata and are applied
+only to compatible units. The IKEA VINDSTYRKA's unitless VOC Index uses the
+1–150, 150–250, 250–400 and 400–500 purifier levels documented for its
+[Sensirion sensor](https://sensirion.com/media/documents/ACD82D45/6294DFC0/Info_Note_Integration_VOC_NOx_Sensor.pdf);
+other unitless VOC indices remain neutral.
+
 Optionally, turn on **Local network URL** to add your instance's LAN address.
 It's the same Home Assistant instance reached by a different address, so it
 reuses the one access token above rather than needing its own. It also asks

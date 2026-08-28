@@ -20,14 +20,18 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
+  readonly property bool pinPreview: card.pinned || cardHover.hovered
   readonly property var cardData: {
     hass.stateRevision
+    hass.pendingToggleRevision
     return hass.roomReadingCard(deviceId)
   }
 
   width: parent ? parent.width : 0
   implicitHeight: header.implicitHeight
     + (expanded ? Style.spacing.lg + metrics.implicitHeight : 0)
+
+  HoverHandler { id: cardHover }
 
   Item {
     id: header
@@ -40,12 +44,48 @@ Item {
     Text {
       textFormat: Text.PlainText
       id: glyph
+      z: 2
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      text: card.cardData.icon
-      color: card.fg
+      width: Style.space(22)
+      horizontalAlignment: Text.AlignHCenter
+      text: card.pinPreview
+        ? "" : card.cardData.icon             // Font Awesome thumb tack
+      color: card.pinned ? Color.accent
+        : (cardHover.hovered ? card.dim : card.fg)
       font.family: card.family
       font.pixelSize: Style.font.heading
+    }
+
+    BorderSurface {
+      z: 1
+      anchors.centerIn: glyph
+      width: Style.space(22)
+      height: Style.space(22)
+      radius: Style.cornerRadius
+      color: card.pinned
+        ? Style.selectedFillFor(card.fg, Color.accent)
+        : (cardHover.hovered
+          ? Style.hoverFillFor(card.fg, card.dim) : "transparent")
+      borderSpec: card.pinned
+        ? Border.controlSpec("selected", card.fg, Color.accent) : Border.none()
+    }
+
+    MouseArea {
+      id: glyphPinMouse
+      z: 3
+      anchors.centerIn: glyph
+      width: Style.space(22)
+      height: Style.space(22)
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: card.pinRequested()
+    }
+
+    PanelToolTip {
+      visible: glyphPinMouse.containsMouse
+      text: card.pinned ? "Unpin expanded readings" : "Pin expanded readings"
+      fontFamily: card.family
     }
 
     Column {
@@ -88,18 +128,6 @@ Item {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.spacing.md
-
-      PanelActionButton {
-        anchors.verticalCenter: parent.verticalCenter
-        iconText: ""                         // Font Awesome thumb tack
-        tooltipText: card.pinned
-          ? "Unpin expanded readings" : "Keep readings expanded"
-        foreground: card.pinned ? card.fg : card.dim
-        fontFamily: card.family
-        size: Style.space(24)
-        bordered: card.pinned
-        onClicked: card.pinRequested()
-      }
 
       ToggleSwitch {
         id: primaryControl

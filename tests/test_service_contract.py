@@ -148,7 +148,15 @@ def main():
     check("room controls are selected explicitly and included in activity",
           "Model.isSafePrimaryControl" in function_block("primaryControlForDevice")
           and "candidates.length === 1" in function_block("primaryControlForDevice")
-          and "root.roomReadings.length" in function_block("activityEntities"))
+          and "root.roomReadings.length" in function_block("activityEntities")
+          and "Model.panelActivityEntities" in function_block("activityEntities"))
+    room_card = open(os.path.join(ROOT, "RoomReadingsCard.qml"),
+                     encoding="utf-8").read()
+    check("room controls observe optimistic pending-map mutations",
+          "property int pendingToggleRevision" in service
+          and "root.pendingToggleRevision++" in function_block("setPendingToggle")
+          and "root.pendingToggleRevision++" in function_block("clearPendingToggle")
+          and "hass.pendingToggleRevision" in room_card)
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)

@@ -23,6 +23,18 @@ function deviceName(device) {
     || cleaned(device.model)
 }
 
+function deviceInfo(device) {
+  if (!device || typeof device !== "object") return ({})
+  return {
+    manufacturer: cleaned(device.manufacturer),
+    model: cleaned(device.model)
+  }
+}
+
+function dictionary() {
+  return Object.create(null)
+}
+
 function indexStates(entities) {
   var next = {}
   if (!Array.isArray(entities)) return next
@@ -69,7 +81,9 @@ function removeState(states, entityId) {
 }
 
 function projectRegistries(areas, entities, devices) {
-  var names = {}
+  // Registry IDs are server-controlled. Prototype-free maps allow valid IDs
+  // such as `toString` without inheriting a non-array value at that key.
+  var names = dictionary()
   var areaList = Array.isArray(areas) ? areas : []
   for (var i = 0; i < areaList.length; i++) {
     var area = areaList[i]
@@ -78,25 +92,27 @@ function projectRegistries(areas, entities, devices) {
     }
   }
 
-  var deviceArea = {}
-  var deviceNames = {}
+  var deviceArea = dictionary()
+  var deviceNames = dictionary()
+  var deviceInfoById = dictionary()
   var deviceList = Array.isArray(devices) ? devices : []
   for (var d = 0; d < deviceList.length; d++) {
     var device = deviceList[d]
     if (device && safeKey(device.id)) {
       deviceArea[device.id] = safeKey(device.area_id) ? device.area_id : ""
       deviceNames[device.id] = deviceName(device)
+      deviceInfoById[device.id] = deviceInfo(device)
     }
   }
 
-  var mapping = {}
-  var deviceEntities = {}
-  var entityRegistry = {}
+  var mapping = dictionary()
+  var deviceEntities = dictionary()
+  var entityRegistry = dictionary()
   // Home Assistant keeps per-light favourite colours in the registry entry's
   // options, not on the entity state, so they are picked up here rather than
   // from the state snapshot. Kept raw: Model validates each entry against the
   // light's own capabilities before anything is drawn or sent.
-  var favorites = {}
+  var favorites = dictionary()
   var entityList = Array.isArray(entities) ? entities : []
   for (var e = 0; e < entityList.length; e++) {
     var entry = entityList[e]
@@ -131,6 +147,7 @@ function projectRegistries(areas, entities, devices) {
     entityArea: mapping,
     favoriteColors: favorites,
     deviceNames: deviceNames,
+    deviceInfo: deviceInfoById,
     deviceArea: deviceArea,
     deviceEntities: deviceEntities,
     entityRegistry: entityRegistry

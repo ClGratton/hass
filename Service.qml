@@ -47,12 +47,13 @@ QtObject {
   property var states: ({})
   property int stateRevision: 0
 
-  property var areaNames: ({})
-  property var entityArea: ({})
-  property var deviceNames: ({})
-  property var deviceArea: ({})
-  property var deviceEntities: ({})
-  property var entityRegistry: ({})
+  property var areaNames: Object.create(null)
+  property var entityArea: Object.create(null)
+  property var deviceNames: Object.create(null)
+  property var deviceInfo: Object.create(null)
+  property var deviceArea: Object.create(null)
+  property var deviceEntities: Object.create(null)
+  property var entityRegistry: Object.create(null)
 
   // Disjoint namespaces: one shared list would show ghosts after a mode switch.
   property var liveFavorites: []
@@ -429,14 +430,16 @@ QtObject {
     root.states = ({})
     root.stateRevision++
     root.sortedEntityIds = []
-    root.areaNames = ({})
-    root.entityArea = ({})
-    root.deviceNames = ({})
-    root.deviceArea = ({})
-    root.deviceEntities = ({})
-    root.entityRegistry = ({})
+    root.areaNames = Object.create(null)
+    root.entityArea = Object.create(null)
+    root.deviceNames = Object.create(null)
+    root.deviceInfo = Object.create(null)
+    root.deviceArea = Object.create(null)
+    root.deviceEntities = Object.create(null)
+    root.entityRegistry = Object.create(null)
     root.temperatureUnit = ""
     root.pendingToggles = ({})
+    root.pendingToggleRevision++
     pendingSweep.running = false
     root.rebuildRows()
   }
@@ -566,6 +569,9 @@ QtObject {
   // entity_id -> { desired, deadline }. The row flips at once and waits for
   // state_changed to confirm.
   property var pendingToggles: ({})
+  // pendingToggles is mutated in place, so bindings need a scalar revision to
+  // observe optimistic checked/busy changes immediately.
+  property int pendingToggleRevision: 0
 
   property Timer pendingSweep: Timer {
     interval: 250
@@ -588,6 +594,7 @@ QtObject {
       desired: desired,
       deadline: Date.now() + root.pendingToggleTimeout
     }
+    root.pendingToggleRevision++
     root.refreshRow(entityId)
     root.refreshRoomReadingForEntity(entityId)
     pendingSweep.running = true
@@ -596,6 +603,7 @@ QtObject {
   function clearPendingToggle(entityId) {
     if (root.pendingToggles[entityId] === undefined) return
     delete root.pendingToggles[entityId]
+    root.pendingToggleRevision++
     root.refreshRoomReadingForEntity(entityId)
     if (!root.hasPendingToggles()) pendingSweep.running = false
   }
@@ -612,6 +620,7 @@ QtObject {
       root.refreshRoomReadingForEntity(expired[i])
       root.lastError = "No response from Home Assistant."
     }
+    if (expired.length) root.pendingToggleRevision++
     if (!root.hasPendingToggles()) pendingSweep.running = false
   }
 
@@ -966,6 +975,7 @@ QtObject {
     root.entityArea = projection.entityArea
     root.savedFavoriteColors = projection.favoriteColors
     root.deviceNames = projection.deviceNames
+    root.deviceInfo = projection.deviceInfo
     root.deviceArea = projection.deviceArea
     root.deviceEntities = projection.deviceEntities
     root.entityRegistry = projection.entityRegistry
@@ -1027,9 +1037,11 @@ QtObject {
     var entityIds = root.liveEntitiesForDevice(deviceId)
     var readings = []
     for (var i = 0; i < entityIds.length; i++) {
-      var reading = Model.environmentalReading(root.states[entityIds[i]])
+      var reading = Model.environmentalReading(
+        root.states[entityIds[i]], root.deviceInfo[deviceId])
       if (reading) readings.push(reading)
     }
+    readings = Model.distinguishEnvironmentalReadings(readings)
     readings.sort(function(a, b) {
       return a.order === b.order ? a.label.localeCompare(b.label) : a.order - b.order
     })
@@ -1151,24 +1163,11 @@ QtObject {
 
   function activityEntities() {
     root.stateRevision
-    var picked = []
-    var seen = {}
-    for (var i = 0; i < root.favorites.length; i++) {
-      var favoriteId = String(root.favorites[i])
-      var entity = root.states[favoriteId]
-      if (entity) {
-        picked.push(entity)
-        seen[favoriteId] = true
-      }
-    }
+    var cards = []
     for (var roomIndex = 0; roomIndex < root.roomReadings.length; roomIndex++) {
-      var controlId = root.primaryControlForDevice(root.roomReadings[roomIndex])
-      if (controlId && !seen[controlId] && root.states[controlId]) {
-        picked.push(root.states[controlId])
-        seen[controlId] = true
-      }
+      cards.push(root.roomReadingCard(root.roomReadings[roomIndex]))
     }
-    return picked
+    return Model.panelActivityEntities(root.favorites, cards, root.states)
   }
 
   readonly property string activitySummary: Model.activitySummary(
