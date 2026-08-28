@@ -169,6 +169,11 @@ def main():
           "EntityStore.validEntityId(entityId)" in function_block("handleHistory")
           and "EntityStore.validEntityId(entity.entity_id)"
           in function_block("appendHistoryPoint"))
+    check("expanded room and entity pins persist independently",
+          "pinnedRoomReadings" in service
+          and "pinnedEntities" in service
+          and "toggleRoomReadingPinned" in service
+          and "toggleEntityPinned" in service)
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)

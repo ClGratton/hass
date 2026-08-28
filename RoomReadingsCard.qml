@@ -26,18 +26,20 @@ Item {
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property bool pinPreview: card.showPanelPinOnHover
     && card.showIcon && card.rowHovered
+  readonly property int barConfigRevision: bar
+    && bar.barConfigSerial !== undefined ? bar.barConfigSerial : 0
+  readonly property var liveShellConfig: {
+    card.barConfigRevision
+    return bar && bar.shell ? bar.shell.shellConfig : null
+  }
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
     return hass.roomReadingCard(deviceId)
   }
 
-  function shellConfig() {
-    return bar && bar.shell ? bar.shell.shellConfig : null
-  }
-
   function inBar(entry) {
-    return BarData.contains(shellConfig(), entry)
+    return BarData.contains(card.liveShellConfig, entry)
   }
 
   function toggleBar(entry) {
@@ -154,46 +156,76 @@ Item {
       }
     }
 
-    Row {
+    Item {
       id: headerActions
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.spacing.md
+      width: Style.space(64 + 22 + 32) + Style.spacing.md * 2
+      height: Style.space(32)
 
-      PanelActionButton {
-        readonly property var entry: BarData.roomEntry(card.deviceId)
-        readonly property bool added: card.inBar(entry)
+      Item {
+        id: roomPrimarySlot
+        anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
-        visible: card.cardData.readings.length >= 2
-        enabled: visible
-        opacity: added || cardHover.hovered ? 1.0 : 0.0
-        iconText: added ? "󰍴" : "󰐕"       // md-minus / md-plus
-        tooltipText: added ? "Remove room readings from the bar" : "Add room readings to the bar"
-        foreground: card.fg
-        fontFamily: card.family
-        onClicked: card.toggleBar(entry)
-      }
-      ToggleSwitch {
-        id: primaryControl
-        anchors.verticalCenter: parent.verticalCenter
-        visible: card.cardData.controlEntityId.length > 0
-        checked: card.cardData.controlOn
-        busy: card.cardData.controlPending
-        interactive: true
-        cursorRing: false
-        foreground: card.fg
-        onToggled: if (card.cardData.controlEntityId) {
-          card.hass.toggleEntity(card.cardData.controlEntityId)
+        width: Style.space(64)
+        height: Style.space(32)
+
+        ToggleSwitch {
+          id: primaryControl
+          anchors.right: parent.right
+          anchors.verticalCenter: parent.verticalCenter
+          visible: card.cardData.controlEntityId.length > 0
+          checked: card.cardData.controlOn
+          busy: card.cardData.controlPending
+          interactive: true
+          cursorRing: false
+          foreground: card.fg
+          onToggled: if (card.cardData.controlEntityId) {
+            card.hass.toggleEntity(card.cardData.controlEntityId)
+          }
         }
       }
 
-      PanelActionButton {
+      Item {
+        id: roomExpandSlot
+        anchors.left: roomPrimarySlot.right
+        anchors.leftMargin: Style.spacing.md
         anchors.verticalCenter: parent.verticalCenter
-        iconText: card.expanded ? "󰅃" : "󰅀"
-        tooltipText: card.expanded ? "Collapse readings" : "Show readings"
-        foreground: card.dim
-        fontFamily: card.family
-        onClicked: card.expansionRequested()
+        width: Style.space(22)
+        height: Style.space(32)
+
+        PanelActionButton {
+          anchors.centerIn: parent
+          iconText: card.expanded ? "󰅃" : "󰅀"
+          tooltipText: card.expanded ? "Collapse readings" : "Show readings"
+          foreground: card.dim
+          fontFamily: card.family
+          onClicked: card.expansionRequested()
+        }
+      }
+
+      Item {
+        id: roomBarSlot
+        readonly property var entry: BarData.roomEntry(card.deviceId)
+        readonly property bool added: card.inBar(entry)
+        anchors.left: roomExpandSlot.right
+        anchors.leftMargin: Style.spacing.md
+        anchors.verticalCenter: parent.verticalCenter
+        width: Style.space(32)
+        height: Style.space(32)
+
+        PanelActionButton {
+          anchors.fill: parent
+          visible: card.cardData.readings.length >= 2
+          opacity: roomBarSlot.added || cardHover.hovered ? 1.0 : 0.0
+          size: parent.width
+          iconText: roomBarSlot.added ? "󰍴" : "󰐕" // md-minus / md-plus
+          tooltipText: roomBarSlot.added
+            ? "Remove room readings from the bar" : "Add room readings to the bar"
+          foreground: card.fg
+          fontFamily: card.family
+          onClicked: card.toggleBar(roomBarSlot.entry)
+        }
       }
     }
   }

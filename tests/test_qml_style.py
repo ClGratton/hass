@@ -127,6 +127,29 @@ check("HistoryPlot {" in bar_graph and "Canvas {" not in bar_graph,
 check("Canvas {" in shared_plot,
       "HistoryPlot has no shared renderer")
 
+print("bar actions reserve geometry and follow layout revisions")
+entity_row = open(os.path.join(ROOT, "EntityRow.qml"), encoding="utf-8").read()
+room_card = open(os.path.join(ROOT, "RoomReadingsCard.qml"), encoding="utf-8").read()
+check("barConfigSerial" in entity_row and "barConfigRevision" in entity_row,
+      "entity bar state does not track the live layout revision")
+check("barConfigSerial" in room_card and "barConfigRevision" in room_card,
+      "room bar state does not track the live layout revision")
+check("id: roomBarSlot" in room_card and "opacity: roomBarSlot.added" in room_card,
+      "room bar action has no permanent geometry slot")
+check(entity_row.index("id: entityPinSlot")
+      < entity_row.index("id: entityPrimarySlot")
+      < entity_row.index("id: entityExpandSlot")
+      < entity_row.index("id: entityBarSlot"),
+      "entity actions are not pin, primary, chevron, bar")
+check(room_card.index("id: roomPinSlot")
+      < room_card.index("id: roomPrimarySlot")
+      < room_card.index("id: roomExpandSlot")
+      < room_card.index("id: roomBarSlot"),
+      "room actions are not pin, primary, chevron, bar")
+check("Row {\n        id: controlSlot" not in entity_row
+      and "Row {\n      id: headerActions" not in room_card,
+      "action slots still depend on a positioner")
+
 print()
 panel = open(os.path.join(ROOT, "Panel.qml"), encoding="utf-8").read()
 entity_row = open(os.path.join(ROOT, "EntityRow.qml"), encoding="utf-8").read()

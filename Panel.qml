@@ -48,8 +48,10 @@ Panel {
   }
 
   function pinnedExpansionVisible(rowKind, entityId, roomDeviceId) {
-    var pinned = rowKind === "room_reading" && serviceReady
-      && hass.isRoomReadingPinned(roomDeviceId)
+    if (!serviceReady) return false
+    var pinned = rowKind === "room_reading"
+      ? hass.isRoomReadingPinned(roomDeviceId)
+      : hass.isEntityPinned(entityId)
     return PanelState.pinnedVisible(
       pinned, collapsedPinnedRows,
       expansionKey(rowKind, entityId, roomDeviceId))
@@ -542,7 +544,7 @@ Panel {
                 }
                 onExpandToggled: {
                   root.toggleRowExpansion(rowKind, entityId, roomDeviceId,
-                                          expanded, roomPinned)
+                                          expanded, pinned)
                 }
                 onExpandedControlCursorRequested: function(controlIndex) {
                   if (controlIndex < 0) return

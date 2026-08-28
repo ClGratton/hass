@@ -59,12 +59,18 @@ CursorSurface {
   readonly property bool roomReading: row.rowKind === "room_reading"
   readonly property bool roomPinned: row.roomReading && row.hass !== null
     && row.hass.isRoomReadingPinned(row.roomDeviceId)
+  readonly property bool entityPinned: !row.roomReading && row.hass !== null
+    && row.hass.isEntityPinned(row.entityId)
+  readonly property bool pinned: row.roomPinned || row.entityPinned
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
   readonly property bool barDataEligible: !row.roomReading
     && Model.barDataEligible(row.entity)
   readonly property var barEntry: BarData.entityEntry(row.entityId)
+  readonly property int barConfigRevision: row.bar
+    && row.bar.barConfigSerial !== undefined ? row.bar.barConfigSerial : 0
   readonly property bool barInBar: {
+    row.barConfigRevision
     var config = row.bar && row.bar.shell ? row.bar.shell.shellConfig : null
     return BarData.contains(config, row.barEntry)
   }
@@ -208,79 +214,129 @@ CursorSurface {
       }
 
       // ---------- primary control + expander ----------
-      Row {
+      Item {
         id: controlSlot
         z: 20
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.spacing.md
+        width: Style.space(24 + 64 + 22 + 32) + Style.spacing.md * 3
+        height: Style.space(32)
 
-        PanelActionButton {
+        Item {
+          id: entityPinSlot
+          anchors.left: parent.left
           anchors.verticalCenter: parent.verticalCenter
-          visible: row.barDataEligible
-          enabled: row.barDataEligible
-          opacity: row.barInBar || rowHover.hovered || row.barActionHovered
-            ? 1.0 : 0.0
-          size: Style.space(32)
-          iconText: row.barInBar ? "󰍴" : "󰐕"  // md-minus / md-plus
-          tooltipText: row.barInBar
-            ? "Remove from the bar" : "Add to the bar"
-          foreground: row.fg
-          fontFamily: row.family
-          onHovered: function(isHovered) { row.barActionHovered = isHovered }
-          onClicked: row.toggleBarData()
-        }
+          width: Style.space(24)
+          height: Style.space(32)
 
-        Text {
-          textFormat: Text.PlainText
-          anchors.verticalCenter: parent.verticalCenter
-          visible: row.control === "none"
-          text: row.badge
-          color: row.dim
-          font.family: row.family
-          font.pixelSize: Style.font.caption
-          font.bold: true
-        }
-
-        Text {
-          textFormat: Text.PlainText
-          anchors.verticalCenter: parent.verticalCenter
-          visible: row.control === "activate"
-          text: "󰐊"                          // md-play
-          color: row.available ? row.fg : row.inactive
-          font.family: row.family
-          font.pixelSize: Style.font.heading
-        }
-
-        ToggleSwitch {
-          anchors.verticalCenter: parent.verticalCenter
-          visible: row.control === "toggle" || row.control === "lock"
-          checked: row.isOn
-          busy: row.pending
-          // cursorRing follows `interactive`; left on it draws a ring on top
-          // of the row's own highlight.
-          interactive: true
-          cursorRing: false
-          foreground: row.fg
-          onToggled: {
-            if (!row.hass || !row.available) return
-            if (row.control === "lock") row.hass.setLock(row.actionEntityId, !row.isOn)
-            else row.hass.toggleEntity(row.actionEntityId)
+          PanelActionButton {
+            anchors.centerIn: parent
+            visible: !row.roomReading && row.expandable
+            enabled: visible
+            iconText: ""                     // Font Awesome thumb tack
+            tooltipText: row.entityPinned
+              ? "Unpin expanded view" : "Keep expanded when the panel opens"
+            foreground: row.entityPinned ? row.fg : row.dim
+            fontFamily: row.family
+            size: Style.space(24)
+            bordered: row.entityPinned
+            onClicked: row.hass.toggleEntityPinned(row.entityId)
           }
         }
 
-        PanelActionButton {
+        Item {
+          id: entityPrimarySlot
+          anchors.left: entityPinSlot.right
+          anchors.leftMargin: Style.spacing.md
           anchors.verticalCenter: parent.verticalCenter
-          visible: row.expandable || row.reserveExpandSlot
-          enabled: row.expandable
-          opacity: row.expandable ? 1.0 : 0.0
-          iconText: row.expanded ? "󰅃" : "󰅀"   // md-chevron_up / md-chevron_down
-          tooltipText: row.expanded
-            ? "Collapse"
-            : (row.domain === "sensor" ? "Show graph" : "Show controls")
-          foreground: row.dim
-          fontFamily: row.family
-          onClicked: row.expandToggled()
+          width: Style.space(64)
+          height: Style.space(32)
+
+          Text {
+            textFormat: Text.PlainText
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.control === "none"
+            text: row.badge
+            color: row.dim
+            font.family: row.family
+            font.pixelSize: Style.font.caption
+            font.bold: true
+          }
+
+          Text {
+            textFormat: Text.PlainText
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.control === "activate"
+            text: "󰐊"                        // md-play
+            color: row.available ? row.fg : row.inactive
+            font.family: row.family
+            font.pixelSize: Style.font.heading
+          }
+
+          ToggleSwitch {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.control === "toggle" || row.control === "lock"
+            checked: row.isOn
+            busy: row.pending
+            interactive: true
+            cursorRing: false
+            foreground: row.fg
+            onToggled: {
+              if (!row.hass || !row.available) return
+              if (row.control === "lock") row.hass.setLock(row.actionEntityId, !row.isOn)
+              else row.hass.toggleEntity(row.actionEntityId)
+            }
+          }
+        }
+
+        Item {
+          id: entityExpandSlot
+          anchors.left: entityPrimarySlot.right
+          anchors.leftMargin: Style.spacing.md
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(22)
+          height: Style.space(32)
+
+          PanelActionButton {
+            anchors.centerIn: parent
+            visible: row.expandable || row.reserveExpandSlot
+            enabled: row.expandable && !row.pinned
+            opacity: row.expandable ? 1.0 : 0.0
+            iconText: row.expanded ? "󰅃" : "󰅀" // md-chevron_up / md-chevron_down
+            tooltipText: row.pinned ? "Pinned open"
+              : (row.expanded ? "Collapse"
+                : (row.domain === "sensor" ? "Show graph" : "Show controls"))
+            foreground: row.dim
+            fontFamily: row.family
+            onClicked: row.expandToggled()
+          }
+        }
+
+        Item {
+          id: entityBarSlot
+          anchors.left: entityExpandSlot.right
+          anchors.leftMargin: Style.spacing.md
+          anchors.verticalCenter: parent.verticalCenter
+          width: Style.space(32)
+          height: Style.space(32)
+
+          PanelActionButton {
+            anchors.fill: parent
+            visible: row.barDataEligible
+            opacity: row.barInBar || rowHover.hovered || row.barActionHovered
+              ? 1.0 : 0.0
+            size: parent.width
+            iconText: row.barInBar ? "󰍴" : "󰐕" // md-minus / md-plus
+            tooltipText: row.barInBar
+              ? "Remove from the bar" : "Add to the bar"
+            foreground: row.fg
+            fontFamily: row.family
+            onHovered: function(isHovered) { row.barActionHovered = isHovered }
+            onClicked: row.toggleBarData()
+          }
         }
       }
     }

@@ -68,6 +68,10 @@ QtObject {
   property var demoPinnedRoomReadings: []
   readonly property var pinnedRoomReadings: root.demoMode
     ? root.demoPinnedRoomReadings : root.livePinnedRoomReadings
+  property var livePinnedEntities: []
+  property var demoPinnedEntities: []
+  readonly property var pinnedEntities: root.demoMode
+    ? root.demoPinnedEntities : root.livePinnedEntities
   property var livePanelOrder: []
   property var demoPanelOrder: []
   readonly property var panelOrder: root.demoMode
@@ -126,6 +130,8 @@ QtObject {
       demoRoomReadings: root.demoRoomReadings.slice(),
       pinnedRoomReadings: root.livePinnedRoomReadings.slice(),
       demoPinnedRoomReadings: root.demoPinnedRoomReadings.slice(),
+      pinnedEntities: root.livePinnedEntities.slice(),
+      demoPinnedEntities: root.demoPinnedEntities.slice(),
       panelOrder: root.livePanelOrder.slice(),
       demoPanelOrder: root.demoPanelOrder.slice(),
       groupByArea: root.groupByArea,
@@ -169,16 +175,20 @@ QtObject {
   function toggleFavorite(entityId) {
     var favorites = root.favorites.slice()
     var order = root.panelOrder.slice()
+    var pinned = root.pinnedEntities.slice()
     var index = favorites.indexOf(entityId)
     if (index === -1) {
       favorites.push(entityId)
       if (order.indexOf(entityId) === -1) order.push(entityId)
     } else {
       favorites.splice(index, 1)
+      var pinnedIndex = pinned.indexOf(entityId)
+      if (pinnedIndex !== -1) pinned.splice(pinnedIndex, 1)
       var orderIndex = order.indexOf(entityId)
       if (orderIndex !== -1) order.splice(orderIndex, 1)
     }
-    root.savePanelSelection(favorites, root.roomReadings.slice(), order)
+    root.savePanelSelection(favorites, root.roomReadings.slice(), order,
+                            undefined, pinned)
   }
 
   function movePanelItem(itemId, delta) {
@@ -196,18 +206,23 @@ QtObject {
       ? { demoPanelOrder: order } : { panelOrder: order })
   }
 
-  function savePanelSelection(favorites, roomReadings, order, pinnedRooms) {
+  function savePanelSelection(favorites, roomReadings, order, pinnedRooms,
+                              pinnedEntityIds) {
     var pins = pinnedRooms === undefined
       ? root.pinnedRoomReadings.slice() : pinnedRooms
+    var entityPins = pinnedEntityIds === undefined
+      ? root.pinnedEntities.slice() : pinnedEntityIds
     root.saveConfig(root.demoMode ? {
       demoFavorites: favorites,
       demoRoomReadings: roomReadings,
       demoPinnedRoomReadings: pins,
+      demoPinnedEntities: entityPins,
       demoPanelOrder: order
     } : {
       favorites: favorites,
       roomReadings: roomReadings,
       pinnedRoomReadings: pins,
+      pinnedEntities: entityPins,
       panelOrder: order
     })
   }
@@ -251,6 +266,20 @@ QtObject {
     else pinned.splice(index, 1)
     root.savePanelSelection(root.favorites.slice(), root.roomReadings.slice(),
                             root.panelOrder.slice(), pinned)
+  }
+
+  function isEntityPinned(entityId) {
+    return root.pinnedEntities.indexOf(entityId) !== -1
+  }
+
+  function toggleEntityPinned(entityId) {
+    if (!root.isFavorite(entityId)) return
+    var pinned = root.pinnedEntities.slice()
+    var index = pinned.indexOf(entityId)
+    if (index === -1) pinned.push(entityId)
+    else pinned.splice(index, 1)
+    root.savePanelSelection(root.favorites.slice(), root.roomReadings.slice(),
+                            root.panelOrder.slice(), undefined, pinned)
   }
 
   // ------------------------------------------------------------ credentials
@@ -313,7 +342,8 @@ QtObject {
     root.connectionSuppressed = false
     root.saveConfig({
       baseUrl: "", localUrl: "", trustedNetwork: "", demoMode: false,
-      favorites: [], roomReadings: [], pinnedRoomReadings: [], panelOrder: [],
+      favorites: [], roomReadings: [], pinnedRoomReadings: [],
+      pinnedEntities: [], panelOrder: [],
       displayNameOverrides: {}, iconOverrides: {}, selectedTab: "favorites"
     })   // demoFavorites untouched: not part of the connection
   }
@@ -422,6 +452,8 @@ QtObject {
     root.demoRoomReadings = config.demoRoomReadings
     root.livePinnedRoomReadings = config.pinnedRoomReadings
     root.demoPinnedRoomReadings = config.demoPinnedRoomReadings
+    root.livePinnedEntities = config.pinnedEntities
+    root.demoPinnedEntities = config.demoPinnedEntities
     root.livePanelOrder = config.panelOrder
     root.demoPanelOrder = config.demoPanelOrder
     root.displayNameOverrides = config.displayNameOverrides

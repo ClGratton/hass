@@ -129,6 +129,11 @@ bar. Each
 child has an independent bar identity, so it can be moved between sections
 without moving or replacing the main Home Assistant icon.
 
+Expandable panel rows have a pin that preserves their expanded state whenever
+the Home Assistant panel opens. Every row reserves the same fixed action slots:
+pin, reading or switch, chevron, then bar add or remove. Hovering never moves an
+action into a different coordinate.
+
 Optionally, turn on **Local network URL** to add your instance's LAN address.
 It's the same Home Assistant instance reached by a different address, so it
 reuses the one access token above rather than needing its own. It also asks
