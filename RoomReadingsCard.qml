@@ -17,7 +17,6 @@ Item {
   property bool rowHovered: false
   property bool showIcon: true
   property bool showPanelPinOnHover: false
-  property bool barActionHovered: false
 
   signal expansionRequested()
   signal pinRequested()
@@ -28,7 +27,6 @@ Item {
   readonly property bool pinPreview: card.showPanelPinOnHover
     && card.showIcon && card.rowHovered
   readonly property bool panelActionsVisible: card.rowHovered
-    || card.barActionHovered
   readonly property int barConfigRevision: bar
     && bar.barConfigSerial !== undefined ? bar.barConfigSerial : 0
   readonly property var liveShellConfig: {
@@ -225,8 +223,7 @@ Item {
               + roomBarMetrics.tightBoundingRect.width / 2
               - roomBarMetrics.advanceWidth / 2)
           visible: card.cardData.readings.length >= 2
-          opacity: roomBarSlot.added ? 1.0
-            : (card.panelActionsVisible ? 1.0 : 0.24)
+            && card.panelActionsVisible
           size: Style.space(20)
           iconText: roomBarSlot.added ? "−" : "+"
           tooltipText: roomBarSlot.added
@@ -234,7 +231,6 @@ Item {
           foreground: roomBarSlot.added ? Color.accent : card.fg
           hoverColor: roomBarSlot.added ? Color.accent : card.fg
           fontFamily: card.family
-          onHovered: function(isHovered) { card.barActionHovered = isHovered }
           onClicked: card.toggleBar(roomBarSlot.entry)
         }
       }

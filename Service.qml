@@ -1258,7 +1258,10 @@ QtObject {
         name: root.displayName(entityId),
         icon: root.iconFor(entityId, entity),
         state: Model.displayState(entity),
-        favorite: root.isFavorite(entityId)
+        favorite: root.isFavorite(entityId),
+        roomReading: false,
+        pinnable: Model.isExpandable(entity),
+        pinned: root.isEntityPinned(entityId)
       })
     }
     return out
@@ -1363,6 +1366,7 @@ QtObject {
           + (card.controlEntityId ? " · on/off" : ""),
         favorite: root.isRoomReading(deviceId),
         roomReading: true,
+        pinnable: true,
         pinned: root.isRoomReadingPinned(deviceId)
       })
     }
@@ -1385,6 +1389,7 @@ QtObject {
           state: card.readings.length + " readings",
           available: card.available,
           roomReading: true,
+          pinnable: true,
           pinned: root.isRoomReadingPinned(deviceId)
         }
       }
@@ -1397,7 +1402,8 @@ QtObject {
         state: entity ? Model.displayState(entity) : "Unavailable",
         available: entity !== undefined,
         roomReading: false,
-        pinned: false
+        pinnable: entity !== undefined && Model.isExpandable(entity),
+        pinned: root.isEntityPinned(itemId)
       }
     })
   }

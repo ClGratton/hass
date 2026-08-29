@@ -38,7 +38,6 @@ CursorSurface {
   signal expandedControlCursorRequested(int index)
 
   property bool expanded: false
-  property bool barActionHovered: false
   property int expandedControlCursorIndex: -1
   readonly property int expandedControlCount: (row.domain === "climate"
     || row.domain === "sensor")
@@ -62,10 +61,9 @@ CursorSurface {
   readonly property bool entityPinned: !row.roomReading && row.hass !== null
     && row.hass.isEntityPinned(row.entityId)
   readonly property bool pinned: row.roomPinned || row.entityPinned
-  readonly property bool pinPreview: row.expandable
-    && entityHeaderHover.hovered
-  readonly property bool panelActionsVisible: row.pinned || rowHover.hovered
-    || row.barActionHovered
+  readonly property bool pinPreview: row.expandable && row.hass !== null
+    && row.hass.showPanelPinOnHover && rowHover.hovered
+  readonly property bool panelActionsVisible: rowHover.hovered
   readonly property string actionEntityId: row.roomReading
     ? row.controlEntityId : row.entityId
   readonly property bool barDataEligible: !row.roomReading
@@ -174,8 +172,6 @@ CursorSurface {
       implicitHeight: Math.max(glyph.implicitHeight, labels.implicitHeight,
                                controlSlot.implicitHeight)
 
-      HoverHandler { id: entityHeaderHover }
-
       Text {
         textFormat: Text.PlainText
         id: glyph
@@ -183,12 +179,10 @@ CursorSurface {
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
         visible: row.showIcon
-        width: row.showIcon ? Style.space(22) : 0
-        horizontalAlignment: Text.AlignHCenter
-        text: row.pinPreview ? "" : row.icon   // Font Awesome thumb tack
-        color: row.pinPreview
-          ? (row.entityPinned ? Color.accent : row.dim)
-          : (row.available && row.isOn ? row.fg : row.inactive)
+        width: row.showIcon ? implicitWidth : 0
+        text: row.icon
+        color: row.available && row.isOn ? row.fg : row.inactive
+        opacity: row.pinPreview ? 0.0 : 1.0
         font.family: row.family
         font.pixelSize: Style.font.heading
       }
@@ -196,23 +190,37 @@ CursorSurface {
       BorderSurface {
         z: 29
         anchors.centerIn: glyph
-        width: Style.space(22)
+        width: Math.max(glyph.implicitWidth, Style.space(18))
         height: Style.space(22)
         radius: Style.cornerRadius
-        color: row.pinPreview
-          ? (row.entityPinned ? Style.selectedFillFor(row.fg, Color.accent)
-            : Style.hoverFillFor(row.fg, row.dim)) : "transparent"
-        borderSpec: row.pinPreview && row.entityPinned
+        visible: row.showIcon && row.pinPreview
+        color: row.entityPinned
+          ? Style.selectedFillFor(row.fg, Color.accent)
+          : Style.hoverFillFor(row.fg, row.dim)
+        borderSpec: row.entityPinned
           ? Border.controlSpec("selected", row.fg, Color.accent) : Border.none()
+      }
+
+      Text {
+        textFormat: Text.PlainText
+        id: pinGlyph
+        z: 30
+        anchors.centerIn: glyph
+        visible: row.showIcon && row.pinPreview
+        text: ""                             // Font Awesome thumb tack
+        color: row.entityPinned ? Color.accent : row.dim
+        font.family: row.family
+        font.pixelSize: Style.font.heading
       }
 
       MouseArea {
         id: glyphPinMouse
         z: 31
         anchors.centerIn: glyph
-        width: Style.space(22)
+        width: Math.max(glyph.implicitWidth, Style.space(22))
         height: Style.space(22)
-        enabled: row.expandable
+        enabled: row.showIcon && row.expandable && row.hass !== null
+          && row.hass.showPanelPinOnHover
         hoverEnabled: true
         cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: row.hass.toggleEntityPinned(row.entityId)
@@ -343,9 +351,7 @@ CursorSurface {
               - (entityBarMetrics.tightBoundingRect.x
                 + entityBarMetrics.tightBoundingRect.width / 2
                 - entityBarMetrics.advanceWidth / 2)
-            visible: row.barDataEligible
-            opacity: row.barInBar ? 1.0
-              : (row.panelActionsVisible ? 1.0 : 0.24)
+            visible: row.barDataEligible && row.panelActionsVisible
             size: Style.space(20)
             iconText: row.barInBar ? "−" : "+"
             tooltipText: row.barInBar
@@ -353,7 +359,6 @@ CursorSurface {
             foreground: row.barInBar ? Color.accent : row.fg
             hoverColor: row.barInBar ? Color.accent : row.fg
             fontFamily: row.family
-            onHovered: function(isHovered) { row.barActionHovered = isHovered }
             onClicked: row.toggleBarData()
           }
         }
@@ -368,12 +373,11 @@ CursorSurface {
           PanelActionButton {
             anchors.centerIn: parent
             visible: row.expandable || row.reserveExpandSlot
-            enabled: row.expandable && !row.pinned
+            enabled: row.expandable
             opacity: row.expandable ? 1.0 : 0.0
             iconText: row.expanded ? "󰅃" : "󰅀" // md-chevron_up / md-chevron_down
-            tooltipText: row.pinned ? "Pinned open"
-              : (row.expanded ? "Collapse"
-                : (row.domain === "sensor" ? "Show graph" : "Show controls"))
+            tooltipText: row.expanded ? "Collapse"
+              : (row.domain === "sensor" ? "Show graph" : "Show controls")
             foreground: row.dim
             fontFamily: row.family
             onClicked: row.expandToggled()

@@ -165,7 +165,7 @@ Panel {
     var item = currentRow()
     if (!item || !item.expandable) return
     root.toggleRowExpansion(item.rowKind, item.entityId, item.roomDeviceId,
-                            item.expanded, item.roomPinned)
+                            item.expanded, item.pinned)
   }
 
   // Colour carries the state, so the button never changes width.

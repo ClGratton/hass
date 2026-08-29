@@ -177,6 +177,15 @@ def main():
           and "pinnedEntities" in service
           and "toggleRoomReadingPinned" in service
           and "toggleEntityPinned" in service)
+    favorites_projection = function_block("favoriteSummaries")
+    browse_projection = function_block("browseEntities")
+    check("settings pins every expandable selected row",
+          "pinnable: true" in favorites_projection
+          and "pinnable: entity !== undefined && Model.isExpandable(entity)"
+          in favorites_projection
+          and "pinned: root.isEntityPinned(itemId)" in favorites_projection
+          and "pinnable: Model.isExpandable(entity)" in browse_projection
+          and "pinned: root.isEntityPinned(entityId)" in browse_projection)
 
     check("selected tab persistence is debounced",
           "selectedTabSaveDebounce.restart()" in service)
