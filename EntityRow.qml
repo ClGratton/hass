@@ -63,7 +63,7 @@ CursorSurface {
     && row.hass.isEntityPinned(row.entityId)
   readonly property bool pinned: row.roomPinned || row.entityPinned
   readonly property bool pinPreview: row.expandable
-    && rowHover.hovered
+    && entityHeaderHover.hovered
   readonly property bool panelActionsVisible: row.pinned || rowHover.hovered
     || row.barActionHovered
   readonly property string actionEntityId: row.roomReading
@@ -167,11 +167,14 @@ CursorSurface {
 
     // ---------- main line ----------
     Item {
+      id: entityHeader
       visible: !row.roomReading
       height: visible ? implicitHeight : 0
       width: parent.width
       implicitHeight: Math.max(glyph.implicitHeight, labels.implicitHeight,
                                controlSlot.implicitHeight)
+
+      HoverHandler { id: entityHeaderHover }
 
       Text {
         textFormat: Text.PlainText
@@ -183,9 +186,9 @@ CursorSurface {
         width: row.showIcon ? Style.space(22) : 0
         horizontalAlignment: Text.AlignHCenter
         text: row.pinPreview ? "" : row.icon   // Font Awesome thumb tack
-        color: row.entityPinned ? Color.accent
-          : (row.pinPreview ? row.dim
-            : (row.available && row.isOn ? row.fg : row.inactive))
+        color: row.pinPreview
+          ? (row.entityPinned ? Color.accent : row.dim)
+          : (row.available && row.isOn ? row.fg : row.inactive)
         font.family: row.family
         font.pixelSize: Style.font.heading
       }
@@ -196,11 +199,10 @@ CursorSurface {
         width: Style.space(22)
         height: Style.space(22)
         radius: Style.cornerRadius
-        color: row.entityPinned
-          ? Style.selectedFillFor(row.fg, Color.accent)
-          : (row.expandable && rowHover.hovered
-            ? Style.hoverFillFor(row.fg, row.dim) : "transparent")
-        borderSpec: row.entityPinned
+        color: row.pinPreview
+          ? (row.entityPinned ? Style.selectedFillFor(row.fg, Color.accent)
+            : Style.hoverFillFor(row.fg, row.dim)) : "transparent"
+        borderSpec: row.pinPreview && row.entityPinned
           ? Border.controlSpec("selected", row.fg, Color.accent) : Border.none()
       }
 
