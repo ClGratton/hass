@@ -20,7 +20,7 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property bool pinPreview: card.pinned || cardHover.hovered
+  readonly property bool pinPreview: cardHover.hovered
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
