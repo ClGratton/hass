@@ -51,8 +51,8 @@ Item {
       horizontalAlignment: Text.AlignHCenter
       text: card.pinPreview
         ? "" : card.cardData.icon             // Font Awesome thumb tack
-      color: card.pinned ? Color.accent
-        : (cardHover.hovered ? card.dim : card.fg)
+      color: card.pinPreview
+        ? (card.pinned ? Color.accent : card.dim) : card.fg
       font.family: card.family
       font.pixelSize: Style.font.heading
     }
@@ -63,11 +63,10 @@ Item {
       width: Style.space(22)
       height: Style.space(22)
       radius: Style.cornerRadius
-      color: card.pinned
-        ? Style.selectedFillFor(card.fg, Color.accent)
-        : (cardHover.hovered
-          ? Style.hoverFillFor(card.fg, card.dim) : "transparent")
-      borderSpec: card.pinned
+      color: card.pinPreview
+        ? (card.pinned ? Style.selectedFillFor(card.fg, Color.accent)
+          : Style.hoverFillFor(card.fg, card.dim)) : "transparent"
+      borderSpec: card.pinPreview && card.pinned
         ? Border.controlSpec("selected", card.fg, Color.accent) : Border.none()
     }
 
