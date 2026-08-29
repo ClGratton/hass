@@ -63,7 +63,7 @@ CursorSurface {
     && row.hass.isEntityPinned(row.entityId)
   readonly property bool pinned: row.roomPinned || row.entityPinned
   readonly property bool pinPreview: row.expandable
-    && (row.entityPinned || rowHover.hovered)
+    && rowHover.hovered
   readonly property bool panelActionsVisible: row.pinned || rowHover.hovered
     || row.barActionHovered
   readonly property string actionEntityId: row.roomReading

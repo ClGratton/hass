@@ -166,12 +166,12 @@ check("readonly property bool panelActionsVisible" in room_card
       and "cardHover.hovered" in room_card
       and "card.barActionHovered" in room_card,
       "room bar action does not follow row hover or pinned state")
-check("row.entityPinned || rowHover.hovered" in entity_row
+check("&& rowHover.hovered" in entity_row
       and 'text: row.pinPreview ? "" : row.icon' in entity_row,
-      "entity icon does not morph into a stationary pin on row hover")
-check("card.pinned || cardHover.hovered" in room_card
+      "entity icon does not temporarily morph into a stationary pin on row hover")
+check("readonly property bool pinPreview: cardHover.hovered" in room_card
       and 'text: card.pinPreview' in room_card,
-      "room icon does not morph into a stationary pin on row hover")
+      "room icon does not temporarily morph into a stationary pin on row hover")
 check("anchors.left: entityPrimarySlot.right" in entity_row
       and "anchors.right: entityExpandSlot.left" in entity_row
       and "id: entityExpandSlot\n          anchors.right: parent.right" in entity_row,
