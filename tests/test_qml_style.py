@@ -116,6 +116,18 @@ for path in QML_FILES:
               "%s:%d PanelActionButton without fontFamily" % (rel(path), line))
 
 print()
+panel = open(os.path.join(ROOT, "Panel.qml"), encoding="utf-8").read()
+room_card = open(os.path.join(ROOT, "RoomReadingsCard.qml"), encoding="utf-8").read()
+check("property var collapsedPinnedRows: []" in panel
+      and "function pinnedExpansionVisible(" in panel
+      and "function toggleRowExpansion(" in panel
+      and "collapsedPinnedRows = []" in panel,
+      "room pins do not act as resettable per-open expansion defaults")
+check("enabled: !card.pinned" not in room_card
+      and 'tooltipText: card.pinned ? "Pinned open"' not in room_card,
+      "a room pin still disables manual collapse")
+
+print()
 if failures:
     for failure in failures:
         print("  FAIL %s" % failure)

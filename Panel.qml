@@ -20,6 +20,9 @@ Panel {
   readonly property string phase: serviceReady ? hass.phase : "idle"
 
   property string expandedEntityId: ""
+  // Pins define the state when the panel opens. This session-only list lets
+  // the user collapse a pinned row without changing that saved default.
+  property var collapsedPinnedRows: []
 
   // One cursor for keyboard and mouse, per the CursorSurface contract.
   // Dormant until a key is pressed.
@@ -33,8 +36,40 @@ Panel {
 
   onOpenedChanged: if (!opened) {
     expandedEntityId = ""
+    collapsedPinnedRows = []
     cursorActive = false
     cursorIndex = 0
+    expandedControlCursorIndex = -1
+  }
+
+  function expansionKey(rowKind, entityId, roomDeviceId) {
+    return rowKind === "room_reading"
+      ? "room:" + roomDeviceId : "entity:" + entityId
+  }
+
+  function pinnedExpansionVisible(rowKind, entityId, roomDeviceId) {
+    return rowKind === "room_reading" && serviceReady
+      && hass.isRoomReadingPinned(roomDeviceId)
+      && collapsedPinnedRows.indexOf(
+        expansionKey(rowKind, entityId, roomDeviceId)) === -1
+  }
+
+  function toggleRowExpansion(rowKind, entityId, roomDeviceId,
+                              currentlyExpanded, pinned) {
+    var key = expansionKey(rowKind, entityId, roomDeviceId)
+    var collapsed = collapsedPinnedRows.slice()
+    var collapsedIndex = collapsed.indexOf(key)
+
+    if (currentlyExpanded) {
+      if (pinned && collapsedIndex === -1) collapsed.push(key)
+      if (expandedEntityId === entityId) expandedEntityId = ""
+    } else if (pinned && collapsedIndex !== -1) {
+      collapsed.splice(collapsedIndex, 1)
+    } else {
+      expandedEntityId = entityId
+    }
+
+    collapsedPinnedRows = collapsed
     expandedControlCursorIndex = -1
   }
 
@@ -502,8 +537,8 @@ Panel {
                 reserveExpandSlot: root.serviceReady ? root.hass.rowsHaveExpandable : false
                 hasCursor: root.cursorActive && root.cursorIndex === index
                   && root.expandedControlCursorIndex < 0
-                expanded: (rowKind === "room_reading" && root.serviceReady
-                  && root.hass.isRoomReadingPinned(roomDeviceId))
+                expanded: root.pinnedExpansionVisible(
+                  rowKind, entityId, roomDeviceId)
                   || root.expandedEntityId === entityId
                 expandedControlCursorIndex: root.cursorIndex === index
                   ? root.expandedControlCursorIndex : -1
@@ -513,10 +548,8 @@ Panel {
                   root.expandedControlCursorIndex = -1
                 }
                 onExpandToggled: {
-                  // One at a time: this is a popup, not a dashboard.
-                  root.expandedEntityId = (root.expandedEntityId === entityId)
-                    ? "" : entityId
-                  root.expandedControlCursorIndex = -1
+                  root.toggleRowExpansion(rowKind, entityId, roomDeviceId,
+                                          expanded, roomPinned)
                 }
                 onExpandedControlCursorRequested: function(controlIndex) {
                   if (controlIndex < 0) return

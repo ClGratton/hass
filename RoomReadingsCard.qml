@@ -20,7 +20,7 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property bool pinPreview: headerHover.hovered
+  readonly property bool pinPreview: cardHover.hovered
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
@@ -31,6 +31,8 @@ Item {
   implicitHeight: header.implicitHeight
     + (expanded ? Style.spacing.lg + metrics.implicitHeight : 0)
 
+  HoverHandler { id: cardHover }
+
   Item {
     id: header
     width: parent.width
@@ -38,8 +40,6 @@ Item {
     anchors.top: parent.top
     implicitHeight: Math.max(glyph.implicitHeight, headerLabels.height,
                              headerControls.implicitHeight)
-
-    HoverHandler { id: headerHover }
 
     Text {
       textFormat: Text.PlainText
@@ -144,10 +144,8 @@ Item {
 
       PanelActionButton {
         anchors.verticalCenter: parent.verticalCenter
-        enabled: !card.pinned
         iconText: card.expanded ? "󰅃" : "󰅀"
-        tooltipText: card.pinned ? "Pinned open"
-          : (card.expanded ? "Collapse readings" : "Show readings")
+        tooltipText: card.expanded ? "Collapse readings" : "Show readings"
         foreground: card.dim
         fontFamily: card.family
         onClicked: card.expansionRequested()
