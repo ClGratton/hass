@@ -117,15 +117,59 @@ for path in QML_FILES:
 
 print()
 panel = open(os.path.join(ROOT, "Panel.qml"), encoding="utf-8").read()
+entity_row = open(os.path.join(ROOT, "EntityRow.qml"), encoding="utf-8").read()
 room_card = open(os.path.join(ROOT, "RoomReadingsCard.qml"), encoding="utf-8").read()
+settings_row = open(os.path.join(ROOT, "SettingsEntityRow.qml"), encoding="utf-8").read()
+settings = open(os.path.join(ROOT, "Settings.qml"), encoding="utf-8").read()
 check("property var collapsedPinnedRows: []" in panel
       and "function pinnedExpansionVisible(" in panel
       and "function toggleRowExpansion(" in panel
       and "collapsedPinnedRows = []" in panel,
       "room pins do not act as resettable per-open expansion defaults")
-check("enabled: !card.pinned" not in room_card
-      and 'tooltipText: card.pinned ? "Pinned open"' not in room_card,
-      "a room pin still disables manual collapse")
+expand_cursor = panel[panel.index("function expandCursor()"):
+                      panel.index("// Colour carries the state")]
+check("toggleRowExpansion(" in expand_cursor
+      and "expandedEntityId =" not in expand_cursor,
+      "keyboard expansion bypasses the shared pinned-row transition")
+
+room_glyph = next(block for _, block in blocks(room_card, "Text")
+                  if "id: glyph" in block)
+check("width:" not in room_glyph
+      and "horizontalAlignment:" not in room_glyph,
+      "room icon still reserves a wider slot than ordinary entity icons")
+check("readonly property bool pinPreview: card.rowHovered" in room_card
+      and "rowHovered: rowHover.hovered" in entity_row,
+      "the room pin preview does not inherit the complete parent-row hover area")
+check('text: card.cardData.icon' in room_glyph
+      and "opacity: card.pinPreview ? 0.0 : 1.0" in room_glyph
+      and "anchors.centerIn: glyph" in room_card
+      and 'text: ""' in room_card,
+      "the hover pin replaces the device icon without preserving its layout width")
+check("onClicked: card.pinRequested()" in room_card
+      and "onPinRequested: row.hass.toggleRoomReadingPinned" in entity_row,
+      "the panel room pin is not interactive")
+
+check('id: pinAction' in settings_row
+      and 'visible: row.pinnable && row.reorderable' in settings_row
+      and 'row.service.toggleRoomReadingPinned(row.entityId)' in settings_row,
+      "the selected Devices row has no room pin action")
+pin_index = settings_row.find("id: pinAction")
+move_up_index = settings_row.find('tooltipText: "Move up"')
+move_down_index = settings_row.find('tooltipText: "Move down"')
+star_index = settings_row.find("md-star / md-star_outline")
+check(pin_index >= 0 and move_up_index >= 0 and move_down_index >= 0
+      and star_index >= 0
+      and pin_index < move_up_index < move_down_index < star_index,
+      "the pin is not immediately before the reorder actions")
+pin_block = next(block for _, block in blocks(settings_row, "PanelActionButton")
+                 if "id: pinAction" in block)
+check("bordered:" not in pin_block
+      and "row.pinned ? Color.accent : Color.muted" in pin_block,
+      "the settings pin uses geometry instead of colour to show saved state")
+check("pinned: modelData.pinned" in settings,
+      "the Devices list does not project saved room pin state")
+check("pinnable: modelData.roomReading === true" in settings,
+      "the Devices list does not identify pinnable room rows")
 
 print()
 if failures:

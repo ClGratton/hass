@@ -634,6 +634,7 @@ Item {
       // not change on the hot path; stateRevision is what fires these.
       readonly property var favorites: root.service
         ? (root.shownRevision, root.service.favorites, root.service.roomReadings,
+           root.service.pinnedRoomReadings,
            root.service.favoriteSummaries())
         : []
       readonly property var results: root.service
@@ -748,6 +749,8 @@ Item {
               favorite: modelData.favorite
               reorderable: false
               roomReading: root.domainFilter === "room_readings"
+              pinnable: modelData.roomReading === true
+              pinned: modelData.pinned === true
               service: root.service
               family: root.family
             }
@@ -808,6 +811,8 @@ Item {
               favorite: true
               reorderable: true
               roomReading: modelData.roomReading
+              pinnable: modelData.roomReading === true
+              pinned: modelData.pinned
               panelItemId: modelData.panelItemId
               service: root.service
               family: root.family

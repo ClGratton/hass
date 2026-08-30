@@ -100,6 +100,8 @@ CursorSurface {
     return hass.entityFor(actionEntityId)
   }
 
+  HoverHandler { id: rowHover }
+
   // Declared first so the buttons above keep their own clicks.
   MouseArea {
     id: rowMouse
@@ -249,6 +251,7 @@ CursorSurface {
           bar: row.bar
           expanded: row.expanded
           pinned: row.roomPinned
+          rowHovered: rowHover.hovered
           onExpansionRequested: row.expandToggled()
           onPinRequested: row.hass.toggleRoomReadingPinned(row.roomDeviceId)
         }

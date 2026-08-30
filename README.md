@@ -138,6 +138,7 @@ node    tests/test_config.js     # config normalization and secret exclusion
 node    tests/test_store.js      # state and registry projections
 node    tests/test_model.js      # entity formatting and classification
 node    tests/test_row_model.js  # ListModel row projection
+node    tests/test_panel_state.js # pinned and temporary expansion state
 python3 tests/test_qml_style.py  # UI house style (fonts, palette, tokens)
 ```
 

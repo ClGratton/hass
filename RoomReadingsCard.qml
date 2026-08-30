@@ -13,6 +13,7 @@ Item {
   property QtObject bar: null
   property bool expanded: false
   property bool pinned: false
+  property bool rowHovered: false
 
   signal expansionRequested()
   signal pinRequested()
@@ -20,7 +21,7 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property bool pinPreview: cardHover.hovered
+  readonly property bool pinPreview: card.rowHovered
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
@@ -30,8 +31,6 @@ Item {
   width: parent ? parent.width : 0
   implicitHeight: header.implicitHeight
     + (expanded ? Style.spacing.lg + metrics.implicitHeight : 0)
-
-  HoverHandler { id: cardHover }
 
   Item {
     id: header
@@ -44,15 +43,11 @@ Item {
     Text {
       textFormat: Text.PlainText
       id: glyph
-      z: 2
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
-      width: Style.space(22)
-      horizontalAlignment: Text.AlignHCenter
-      text: card.pinPreview
-        ? "" : card.cardData.icon             // Font Awesome thumb tack
-      color: card.pinPreview
-        ? (card.pinned ? Color.accent : card.dim) : card.fg
+      text: card.cardData.icon
+      color: card.fg
+      opacity: card.pinPreview ? 0.0 : 1.0
       font.family: card.family
       font.pixelSize: Style.font.heading
     }
@@ -60,21 +55,34 @@ Item {
     BorderSurface {
       z: 1
       anchors.centerIn: glyph
-      width: Style.space(22)
+      width: Math.max(glyph.implicitWidth, Style.space(18))
       height: Style.space(22)
       radius: Style.cornerRadius
-      color: card.pinPreview
-        ? (card.pinned ? Style.selectedFillFor(card.fg, Color.accent)
-          : Style.hoverFillFor(card.fg, card.dim)) : "transparent"
-      borderSpec: card.pinPreview && card.pinned
+      visible: card.pinPreview
+      color: card.pinned
+        ? Style.selectedFillFor(card.fg, Color.accent)
+        : Style.hoverFillFor(card.fg, card.dim)
+      borderSpec: card.pinned
         ? Border.controlSpec("selected", card.fg, Color.accent) : Border.none()
+    }
+
+    Text {
+      textFormat: Text.PlainText
+      id: pinGlyph
+      z: 2
+      anchors.centerIn: glyph
+      visible: card.pinPreview
+      text: ""                               // Font Awesome thumb tack
+      color: card.pinned ? Color.accent : card.dim
+      font.family: card.family
+      font.pixelSize: Style.font.heading
     }
 
     MouseArea {
       id: glyphPinMouse
       z: 3
       anchors.centerIn: glyph
-      width: Style.space(22)
+      width: Math.max(glyph.implicitWidth, Style.space(22))
       height: Style.space(22)
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor

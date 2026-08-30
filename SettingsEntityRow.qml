@@ -14,6 +14,8 @@ CursorSurface {
   required property bool favorite
   required property bool reorderable
   property bool roomReading: false
+  property bool pinnable: false
+  property bool pinned: false
   property string panelItemId: entityId
   property var service: null
   property string family: Style.font.menuFamily
@@ -83,6 +85,25 @@ CursorSurface {
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(4)
+
+      PanelActionButton {
+        id: pinAction
+        anchors.verticalCenter: parent.verticalCenter
+        visible: row.pinnable && row.reorderable
+        iconText: ""                         // Font Awesome thumb tack
+        tooltipText: row.pinned
+          ? "Do not keep expanded"
+          : "Keep expanded when the panel opens"
+        foreground: row.pinned ? Color.accent : Color.muted
+        hoverColor: row.pinned ? Color.accent : Color.foreground
+        fontFamily: row.family
+        onClicked: if (row.service) {
+          if (row.roomReading) row.service.toggleRoomReadingPinned(row.entityId)
+          else if (typeof row.service.toggleEntityPinned === "function") {
+            row.service.toggleEntityPinned(row.entityId)
+          }
+        }
+      }
 
       PanelActionButton {
         anchors.verticalCenter: parent.verticalCenter

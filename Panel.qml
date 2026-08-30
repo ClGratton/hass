@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons
 import "Model.js" as Model
+import "PanelState.js" as PanelState
 
 // Bar button plus popup panel. Owns the keyboard cursor and the tab selection;
 // the service owns the devices and the connection.
@@ -43,33 +44,25 @@ Panel {
   }
 
   function expansionKey(rowKind, entityId, roomDeviceId) {
-    return rowKind === "room_reading"
-      ? "room:" + roomDeviceId : "entity:" + entityId
+    return PanelState.rowKey(rowKind, entityId, roomDeviceId)
   }
 
   function pinnedExpansionVisible(rowKind, entityId, roomDeviceId) {
-    return rowKind === "room_reading" && serviceReady
+    var pinned = rowKind === "room_reading" && serviceReady
       && hass.isRoomReadingPinned(roomDeviceId)
-      && collapsedPinnedRows.indexOf(
-        expansionKey(rowKind, entityId, roomDeviceId)) === -1
+    return PanelState.pinnedVisible(
+      pinned, collapsedPinnedRows,
+      expansionKey(rowKind, entityId, roomDeviceId))
   }
 
   function toggleRowExpansion(rowKind, entityId, roomDeviceId,
                               currentlyExpanded, pinned) {
-    var key = expansionKey(rowKind, entityId, roomDeviceId)
-    var collapsed = collapsedPinnedRows.slice()
-    var collapsedIndex = collapsed.indexOf(key)
-
-    if (currentlyExpanded) {
-      if (pinned && collapsedIndex === -1) collapsed.push(key)
-      if (expandedEntityId === entityId) expandedEntityId = ""
-    } else if (pinned && collapsedIndex !== -1) {
-      collapsed.splice(collapsedIndex, 1)
-    } else {
-      expandedEntityId = entityId
-    }
-
-    collapsedPinnedRows = collapsed
+    var next = PanelState.toggle(
+      collapsedPinnedRows, expandedEntityId,
+      expansionKey(rowKind, entityId, roomDeviceId), entityId,
+      currentlyExpanded, pinned)
+    collapsedPinnedRows = next.collapsedPinnedRows
+    expandedEntityId = next.expandedEntityId
     expandedControlCursorIndex = -1
   }
 
@@ -169,8 +162,8 @@ Panel {
   function expandCursor() {
     var item = currentRow()
     if (!item || !item.expandable) return
-    expandedEntityId = (expandedEntityId === item.entityId) ? "" : item.entityId
-    expandedControlCursorIndex = -1
+    root.toggleRowExpansion(item.rowKind, item.entityId, item.roomDeviceId,
+                            item.expanded, item.roomPinned)
   }
 
   // Colour carries the state, so the button never changes width.

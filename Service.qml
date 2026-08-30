@@ -1116,7 +1116,8 @@ QtObject {
         detail: card.readings.length + " readings"
           + (card.controlEntityId ? " · on/off" : ""),
         favorite: root.isRoomReading(deviceId),
-        roomReading: true
+        roomReading: true,
+        pinned: root.isRoomReadingPinned(deviceId)
       })
     }
     out.sort(function(a, b) {
@@ -1137,7 +1138,8 @@ QtObject {
           icon: card.icon,
           state: card.readings.length + " readings",
           available: card.available,
-          roomReading: true
+          roomReading: true,
+          pinned: root.isRoomReadingPinned(deviceId)
         }
       }
       var entity = root.states[itemId]
@@ -1148,7 +1150,8 @@ QtObject {
         icon: root.iconFor(itemId, entity),
         state: entity ? Model.displayState(entity) : "Unavailable",
         available: entity !== undefined,
-        roomReading: false
+        roomReading: false,
+        pinned: false
       }
     })
   }
