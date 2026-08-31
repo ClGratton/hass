@@ -134,10 +134,15 @@ check("toggleRowExpansion(" in expand_cursor
 
 room_glyph = next(block for _, block in blocks(room_card, "Text")
                   if "id: glyph" in block)
-check("width:" not in room_glyph
+check("visible: card.showIcon" in room_glyph
+      and "width: card.showIcon ? implicitWidth : 0" in room_glyph
       and "horizontalAlignment:" not in room_glyph,
-      "room icon still reserves a wider slot than ordinary entity icons")
-check("readonly property bool pinPreview: card.rowHovered" in room_card
+      "room icon does not follow the ordinary entity icon visibility geometry")
+check("property bool showIcon: true" in room_card
+      and "showIcon: row.showIcon" in entity_row
+      and "anchors.leftMargin: card.showIcon ? Style.spacing.xl : 0" in room_card,
+      "grouped reading rows do not respect showEntityIcons")
+check("readonly property bool pinPreview: card.showIcon && card.rowHovered" in room_card
       and "rowHovered: rowHover.hovered" in entity_row,
       "the room pin preview does not inherit the complete parent-row hover area")
 check('text: card.cardData.icon' in room_glyph
@@ -148,6 +153,10 @@ check('text: card.cardData.icon' in room_glyph
 check("onClicked: card.pinRequested()" in room_card
       and "onPinRequested: row.hass.toggleRoomReadingPinned" in entity_row,
       "the panel room pin is not interactive")
+pin_mouse = next(block for _, block in blocks(room_card, "MouseArea")
+                 if "id: glyphPinMouse" in block)
+check("enabled: card.showIcon" in pin_mouse,
+      "a hidden room icon still leaves an interactive panel pin target")
 
 check('id: pinAction' in settings_row
       and 'visible: row.pinnable && row.reorderable' in settings_row

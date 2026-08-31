@@ -14,6 +14,7 @@ Item {
   property bool expanded: false
   property bool pinned: false
   property bool rowHovered: false
+  property bool showIcon: true
 
   signal expansionRequested()
   signal pinRequested()
@@ -21,7 +22,7 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property bool pinPreview: card.rowHovered
+  readonly property bool pinPreview: card.showIcon && card.rowHovered
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
@@ -45,6 +46,8 @@ Item {
       id: glyph
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
+      visible: card.showIcon
+      width: card.showIcon ? implicitWidth : 0
       text: card.cardData.icon
       color: card.fg
       opacity: card.pinPreview ? 0.0 : 1.0
@@ -84,8 +87,9 @@ Item {
       anchors.centerIn: glyph
       width: Math.max(glyph.implicitWidth, Style.space(22))
       height: Style.space(22)
+      enabled: card.showIcon
       hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
+      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
       onClicked: card.pinRequested()
     }
 
@@ -98,7 +102,7 @@ Item {
     Column {
       id: headerLabels
       anchors.left: glyph.right
-      anchors.leftMargin: Style.spacing.xl
+      anchors.leftMargin: card.showIcon ? Style.spacing.xl : 0
       anchors.right: headerControls.left
       anchors.rightMargin: Style.spacing.lg
       anchors.verticalCenter: parent.verticalCenter

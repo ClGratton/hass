@@ -252,6 +252,7 @@ CursorSurface {
           expanded: row.expanded
           pinned: row.roomPinned
           rowHovered: rowHover.hovered
+          showIcon: row.showIcon
           onExpansionRequested: row.expandToggled()
           onPinRequested: row.hass.toggleRoomReadingPinned(row.roomDeviceId)
         }
