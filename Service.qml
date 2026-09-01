@@ -76,6 +76,7 @@ QtObject {
   property var iconOverrides: ({})
   property bool groupByArea: false
   property bool showEntityIcons: true
+  property bool showPanelPinOnHover: false
 
   // [{ id, title, entityIds }] — favorites, then areas, then "Other".
   property var tabs: [{ id: "favorites", title: "Favorites", entityIds: [] }]
@@ -122,6 +123,7 @@ QtObject {
       demoPanelOrder: root.demoPanelOrder.slice(),
       groupByArea: root.groupByArea,
       showEntityIcons: root.showEntityIcons,
+      showPanelPinOnHover: root.showPanelPinOnHover,
       selectedTab: root.activeTab,
       displayNameOverrides: root.displayNameOverrides,
       iconOverrides: root.iconOverrides
@@ -140,6 +142,11 @@ QtObject {
   function setGroupByArea(enabled) {
     if (root.groupByArea === enabled) return
     root.saveConfig({ groupByArea: enabled })
+  }
+
+  function setShowPanelPinOnHover(enabled) {
+    if (root.showPanelPinOnHover === enabled) return
+    root.saveConfig({ showPanelPinOnHover: enabled })
   }
 
   // FileView will not create a missing parent directory, and starting the
@@ -414,6 +421,7 @@ QtObject {
     root.iconOverrides = config.iconOverrides
     root.groupByArea = config.groupByArea
     root.showEntityIcons = config.showEntityIcons
+    root.showPanelPinOnHover = config.showPanelPinOnHover
     root.activeTab = config.selectedTab
 
     root.configured = root.demoMode || root.baseUrl.length > 0

@@ -5,7 +5,7 @@ var KEYS = [
   "demoFavorites", "roomReadings", "demoRoomReadings",
   "pinnedRoomReadings", "demoPinnedRoomReadings",
   "panelOrder", "demoPanelOrder",
-  "groupByArea", "showEntityIcons", "selectedTab",
+  "groupByArea", "showEntityIcons", "showPanelPinOnHover", "selectedTab",
   "displayNameOverrides", "iconOverrides"
 ]
 
@@ -145,6 +145,7 @@ function parse(text, demoDefaults) {
         raw.demoPanelOrder, demoFavorites, demoRoomReadings),
       groupByArea: raw.groupByArea === true,
       showEntityIcons: raw.showEntityIcons !== false,
+      showPanelPinOnHover: raw.showPanelPinOnHover === true,
       selectedTab: typeof raw.selectedTab === "string" && raw.selectedTab
         ? raw.selectedTab : "favorites",
       displayNameOverrides: plainMap(raw.displayNameOverrides),

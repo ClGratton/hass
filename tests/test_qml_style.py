@@ -121,6 +121,7 @@ entity_row = open(os.path.join(ROOT, "EntityRow.qml"), encoding="utf-8").read()
 room_card = open(os.path.join(ROOT, "RoomReadingsCard.qml"), encoding="utf-8").read()
 settings_row = open(os.path.join(ROOT, "SettingsEntityRow.qml"), encoding="utf-8").read()
 settings = open(os.path.join(ROOT, "Settings.qml"), encoding="utf-8").read()
+service = open(os.path.join(ROOT, "Service.qml"), encoding="utf-8").read()
 check("property var collapsedPinnedRows: []" in panel
       and "function pinnedExpansionVisible(" in panel
       and "function toggleRowExpansion(" in panel
@@ -142,7 +143,8 @@ check("property bool showIcon: true" in room_card
       and "showIcon: row.showIcon" in entity_row
       and "anchors.leftMargin: card.showIcon ? Style.spacing.xl : 0" in room_card,
       "grouped reading rows do not respect showEntityIcons")
-check("readonly property bool pinPreview: card.showIcon && card.rowHovered" in room_card
+check("readonly property bool pinPreview: card.showPanelPinOnHover" in room_card
+      and "&& card.showIcon && card.rowHovered" in room_card
       and "rowHovered: rowHover.hovered" in entity_row,
       "the room pin preview does not inherit the complete parent-row hover area")
 check('text: card.cardData.icon' in room_glyph
@@ -155,8 +157,13 @@ check("onClicked: card.pinRequested()" in room_card
       "the panel room pin is not interactive")
 pin_mouse = next(block for _, block in blocks(room_card, "MouseArea")
                  if "id: glyphPinMouse" in block)
-check("enabled: card.showIcon" in pin_mouse,
-      "a hidden room icon still leaves an interactive panel pin target")
+check("enabled: card.showPanelPinOnHover && card.showIcon" in pin_mouse,
+      "a disabled room pin shortcut still leaves an interactive panel target")
+check("property bool showPanelPinOnHover: false" in service
+      and "function setShowPanelPinOnHover(enabled)" in service
+      and 'label: "Show pin shortcut on hover"' in settings
+      and "checked: root.service ? root.service.showPanelPinOnHover : false" in settings,
+      "the panel pin hover shortcut is not exposed as an opt-in General setting")
 
 check('id: pinAction' in settings_row
       and 'visible: row.pinnable && row.reorderable' in settings_row

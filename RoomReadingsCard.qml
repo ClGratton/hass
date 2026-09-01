@@ -15,6 +15,7 @@ Item {
   property bool pinned: false
   property bool rowHovered: false
   property bool showIcon: true
+  property bool showPanelPinOnHover: false
 
   signal expansionRequested()
   signal pinRequested()
@@ -22,7 +23,8 @@ Item {
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
-  readonly property bool pinPreview: card.showIcon && card.rowHovered
+  readonly property bool pinPreview: card.showPanelPinOnHover
+    && card.showIcon && card.rowHovered
   readonly property var cardData: {
     hass.stateRevision
     hass.pendingToggleRevision
@@ -87,7 +89,7 @@ Item {
       anchors.centerIn: glyph
       width: Math.max(glyph.implicitWidth, Style.space(22))
       height: Style.space(22)
-      enabled: card.showIcon
+      enabled: card.showPanelPinOnHover && card.showIcon
       hoverEnabled: true
       cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
       onClicked: card.pinRequested()

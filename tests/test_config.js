@@ -32,6 +32,7 @@ const parsed = Config.parse(JSON.stringify({
   favorites: ["light.a", 4, "", "light.a"],
   demoFavorites: [],
   showEntityIcons: false,
+  showPanelPinOnHover: true,
   displayNameOverrides: { "light.a": "Desk", bad: 4 },
   iconOverrides: [],
   selectedTab: "area:kitchen"
@@ -51,10 +52,15 @@ eq("typed values are normalized", parsed.config, {
   demoPanelOrder: [],
   groupByArea: false,
   showEntityIcons: false,
+  showPanelPinOnHover: true,
   selectedTab: "area:kitchen",
   displayNameOverrides: { "light.a": "Desk" },
   iconOverrides: {}
 });
+
+const defaults = Config.parse("{}", []);
+eq("the panel pin hover shortcut is opt in",
+   defaults.config.showPanelPinOnHover, false);
 
 const withLocal = Config.parse(JSON.stringify({
   baseUrl: "https://ha.example.com",

@@ -95,6 +95,11 @@ card for temperature, humidity, particulate matter, VOC, carbon dioxide and
 other available readings. Individual sensor entities remain available in the
 other categories and can still be starred separately.
 
+Pins that keep expandable rows open are always available in **Devices** settings.
+The optional **Show pin shortcut on hover** toggle in **General** also exposes
+that action over the normal panel icon while a row is hovered. It is off by
+default.
+
 Classification follows Home Assistant's documented
 [`SensorDeviceClass`](https://developers.home-assistant.io/docs/core/entity/sensor/)
 metadata first. A classless sensor is included only when both its entity name

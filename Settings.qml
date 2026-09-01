@@ -618,6 +618,19 @@ Item {
             root.service.setGroupByArea(!root.service.groupByArea)
           }
         }
+
+        Toggle {
+          width: parent.width
+          label: "Show pin shortcut on hover"
+          description: "Replace an expandable device icon with its pin shortcut while the pointer is over the row."
+          checked: root.service ? root.service.showPanelPinOnHover : false
+          foreground: root.foreground
+          fontFamily: root.family
+          onClicked: if (root.service) {
+            root.service.setShowPanelPinOnHover(
+              !root.service.showPanelPinOnHover)
+          }
+        }
       }
     }
   }
