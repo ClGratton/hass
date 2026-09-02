@@ -47,18 +47,36 @@ QtObject {
   property var states: ({})
   property int stateRevision: 0
 
-  property var areaNames: ({})
-  property var entityArea: ({})
+  property var areaNames: Object.create(null)
+  property var entityArea: Object.create(null)
+  property var deviceNames: Object.create(null)
+  property var deviceInfo: Object.create(null)
+  property var deviceArea: Object.create(null)
+  property var deviceEntities: Object.create(null)
+  property var entityRegistry: Object.create(null)
 
   // Disjoint namespaces: one shared list would show ghosts after a mode switch.
   property var liveFavorites: []
   property var demoFavorites: []
   readonly property var favorites: root.demoMode ? root.demoFavorites : root.liveFavorites
+  property var liveRoomReadings: []
+  property var demoRoomReadings: []
+  readonly property var roomReadings: root.demoMode
+    ? root.demoRoomReadings : root.liveRoomReadings
+  property var livePinnedRoomReadings: []
+  property var demoPinnedRoomReadings: []
+  readonly property var pinnedRoomReadings: root.demoMode
+    ? root.demoPinnedRoomReadings : root.livePinnedRoomReadings
+  property var livePanelOrder: []
+  property var demoPanelOrder: []
+  readonly property var panelOrder: root.demoMode
+    ? root.demoPanelOrder : root.livePanelOrder
 
   property var displayNameOverrides: ({})
   property var iconOverrides: ({})
   property bool groupByArea: false
   property bool showEntityIcons: true
+  property bool showPanelPinOnHover: false
 
   // [{ id, title, entityIds }] — favorites, then areas, then "Other".
   property var tabs: [{ id: "favorites", title: "Favorites", entityIds: [] }]
@@ -97,8 +115,15 @@ QtObject {
       demoMode: root.demoMode,
       favorites: root.liveFavorites.slice(),
       demoFavorites: root.demoFavorites.slice(),
+      roomReadings: root.liveRoomReadings.slice(),
+      demoRoomReadings: root.demoRoomReadings.slice(),
+      pinnedRoomReadings: root.livePinnedRoomReadings.slice(),
+      demoPinnedRoomReadings: root.demoPinnedRoomReadings.slice(),
+      panelOrder: root.livePanelOrder.slice(),
+      demoPanelOrder: root.demoPanelOrder.slice(),
       groupByArea: root.groupByArea,
       showEntityIcons: root.showEntityIcons,
+      showPanelPinOnHover: root.showPanelPinOnHover,
       selectedTab: root.activeTab,
       displayNameOverrides: root.displayNameOverrides,
       iconOverrides: root.iconOverrides
@@ -119,6 +144,11 @@ QtObject {
     root.saveConfig({ groupByArea: enabled })
   }
 
+  function setShowPanelPinOnHover(enabled) {
+    if (root.showPanelPinOnHover === enabled) return
+    root.saveConfig({ showPanelPinOnHover: enabled })
+  }
+
   // FileView will not create a missing parent directory, and starting the
   // process is asynchronous — doing it inside saveConfig races the write it is
   // supposed to enable, which on a fresh install loses the first save silently
@@ -131,28 +161,89 @@ QtObject {
 
   function toggleFavorite(entityId) {
     var favorites = root.favorites.slice()
+    var order = root.panelOrder.slice()
     var index = favorites.indexOf(entityId)
-    if (index === -1) favorites.push(entityId)
-    else favorites.splice(index, 1)
-    root.saveFavorites(favorites)
+    if (index === -1) {
+      favorites.push(entityId)
+      if (order.indexOf(entityId) === -1) order.push(entityId)
+    } else {
+      favorites.splice(index, 1)
+      var orderIndex = order.indexOf(entityId)
+      if (orderIndex !== -1) order.splice(orderIndex, 1)
+    }
+    root.savePanelSelection(favorites, root.roomReadings.slice(), order)
   }
 
-  function moveFavorite(entityId, delta) {
-    var favorites = root.favorites.slice()
-    var index = favorites.indexOf(entityId)
+  function movePanelItem(itemId, delta) {
+    var order = root.panelOrder.slice()
+    var index = order.indexOf(itemId)
     if (index === -1) return
     var target = index + delta
-    if (target < 0 || target >= favorites.length) return
-    favorites.splice(target, 0, favorites.splice(index, 1)[0])
-    root.saveFavorites(favorites)
+    if (target < 0 || target >= order.length) return
+    order.splice(target, 0, order.splice(index, 1)[0])
+    root.savePanelOrder(order)
   }
 
-  function saveFavorites(list) {
-    root.saveConfig(root.demoMode ? { demoFavorites: list } : { favorites: list })
+  function savePanelOrder(order) {
+    root.saveConfig(root.demoMode
+      ? { demoPanelOrder: order } : { panelOrder: order })
+  }
+
+  function savePanelSelection(favorites, roomReadings, order, pinnedRooms) {
+    var pins = pinnedRooms === undefined
+      ? root.pinnedRoomReadings.slice() : pinnedRooms
+    root.saveConfig(root.demoMode ? {
+      demoFavorites: favorites,
+      demoRoomReadings: roomReadings,
+      demoPinnedRoomReadings: pins,
+      demoPanelOrder: order
+    } : {
+      favorites: favorites,
+      roomReadings: roomReadings,
+      pinnedRoomReadings: pins,
+      panelOrder: order
+    })
   }
 
   function isFavorite(entityId) {
     return root.favorites.indexOf(entityId) !== -1
+  }
+
+  function toggleRoomReading(deviceId) {
+    var selected = root.roomReadings.slice()
+    var order = root.panelOrder.slice()
+    var itemId = "room_reading:" + deviceId
+    var index = selected.indexOf(deviceId)
+    var pinned = root.pinnedRoomReadings.slice()
+    if (index === -1) {
+      selected.push(deviceId)
+      if (order.indexOf(itemId) === -1) order.push(itemId)
+    } else {
+      selected.splice(index, 1)
+      var pinnedIndex = pinned.indexOf(deviceId)
+      if (pinnedIndex !== -1) pinned.splice(pinnedIndex, 1)
+      var orderIndex = order.indexOf(itemId)
+      if (orderIndex !== -1) order.splice(orderIndex, 1)
+    }
+    root.savePanelSelection(root.favorites.slice(), selected, order, pinned)
+  }
+
+  function isRoomReading(deviceId) {
+    return root.roomReadings.indexOf(deviceId) !== -1
+  }
+
+  function isRoomReadingPinned(deviceId) {
+    return root.pinnedRoomReadings.indexOf(deviceId) !== -1
+  }
+
+  function toggleRoomReadingPinned(deviceId) {
+    if (!root.isRoomReading(deviceId)) return
+    var pinned = root.pinnedRoomReadings.slice()
+    var index = pinned.indexOf(deviceId)
+    if (index === -1) pinned.push(deviceId)
+    else pinned.splice(index, 1)
+    root.savePanelSelection(root.favorites.slice(), root.roomReadings.slice(),
+                            root.panelOrder.slice(), pinned)
   }
 
   // ------------------------------------------------------------ credentials
@@ -214,7 +305,8 @@ QtObject {
   function finishRemoveConnection() {
     root.connectionSuppressed = false
     root.saveConfig({
-      baseUrl: "", localUrl: "", trustedNetwork: "", demoMode: false, favorites: [],
+      baseUrl: "", localUrl: "", trustedNetwork: "", demoMode: false,
+      favorites: [], roomReadings: [], pinnedRoomReadings: [], panelOrder: [],
       displayNameOverrides: {}, iconOverrides: {}, selectedTab: "favorites"
     })   // demoFavorites untouched: not part of the connection
   }
@@ -319,10 +411,17 @@ QtObject {
     root.trustedNetwork = config.trustedNetwork
     root.liveFavorites = config.favorites
     root.demoFavorites = config.demoFavorites
+    root.liveRoomReadings = config.roomReadings
+    root.demoRoomReadings = config.demoRoomReadings
+    root.livePinnedRoomReadings = config.pinnedRoomReadings
+    root.demoPinnedRoomReadings = config.demoPinnedRoomReadings
+    root.livePanelOrder = config.panelOrder
+    root.demoPanelOrder = config.demoPanelOrder
     root.displayNameOverrides = config.displayNameOverrides
     root.iconOverrides = config.iconOverrides
     root.groupByArea = config.groupByArea
     root.showEntityIcons = config.showEntityIcons
+    root.showPanelPinOnHover = config.showPanelPinOnHover
     root.activeTab = config.selectedTab
 
     root.configured = root.demoMode || root.baseUrl.length > 0
@@ -339,10 +438,16 @@ QtObject {
     root.states = ({})
     root.stateRevision++
     root.sortedEntityIds = []
-    root.areaNames = ({})
-    root.entityArea = ({})
+    root.areaNames = Object.create(null)
+    root.entityArea = Object.create(null)
+    root.deviceNames = Object.create(null)
+    root.deviceInfo = Object.create(null)
+    root.deviceArea = Object.create(null)
+    root.deviceEntities = Object.create(null)
+    root.entityRegistry = Object.create(null)
     root.temperatureUnit = ""
     root.pendingToggles = ({})
+    root.pendingToggleRevision++
     pendingSweep.running = false
     root.rebuildRows()
   }
@@ -472,6 +577,9 @@ QtObject {
   // entity_id -> { desired, deadline }. The row flips at once and waits for
   // state_changed to confirm.
   property var pendingToggles: ({})
+  // pendingToggles is mutated in place, so bindings need a scalar revision to
+  // observe optimistic checked/busy changes immediately.
+  property int pendingToggleRevision: 0
 
   property Timer pendingSweep: Timer {
     interval: 250
@@ -494,13 +602,17 @@ QtObject {
       desired: desired,
       deadline: Date.now() + root.pendingToggleTimeout
     }
+    root.pendingToggleRevision++
     root.refreshRow(entityId)
+    root.refreshRoomReadingForEntity(entityId)
     pendingSweep.running = true
   }
 
   function clearPendingToggle(entityId) {
     if (root.pendingToggles[entityId] === undefined) return
     delete root.pendingToggles[entityId]
+    root.pendingToggleRevision++
+    root.refreshRoomReadingForEntity(entityId)
     if (!root.hasPendingToggles()) pendingSweep.running = false
   }
 
@@ -513,8 +625,10 @@ QtObject {
     for (var i = 0; i < expired.length; i++) {
       delete root.pendingToggles[expired[i]]
       root.refreshRow(expired[i])
+      root.refreshRoomReadingForEntity(expired[i])
       root.lastError = "No response from Home Assistant."
     }
+    if (expired.length) root.pendingToggleRevision++
     if (!root.hasPendingToggles()) pendingSweep.running = false
   }
 
@@ -826,6 +940,7 @@ QtObject {
       root.rebuildRows()
     } else {
       root.refreshRow(entity.entity_id)
+      root.refreshRoomReadingForEntity(entity.entity_id)
     }
   }
 
@@ -852,12 +967,26 @@ QtObject {
     }
   }
 
+  function refreshRoomReadingForEntity(entityId) {
+    for (var i = 0; i < root.roomReadings.length; i++) {
+      var deviceId = root.roomReadings[i]
+      if ((root.deviceEntities[deviceId] || []).indexOf(entityId) !== -1) {
+        root.refreshRow("room_reading:" + deviceId)
+      }
+    }
+  }
+
   function applyRegistries(event) {
     var projection = EntityStore.projectRegistries(
       event.areas, event.entities, event.devices)
     root.areaNames = projection.areaNames
     root.entityArea = projection.entityArea
     root.savedFavoriteColors = projection.favoriteColors
+    root.deviceNames = projection.deviceNames
+    root.deviceInfo = projection.deviceInfo
+    root.deviceArea = projection.deviceArea
+    root.deviceEntities = projection.deviceEntities
+    root.entityRegistry = projection.entityRegistry
     root.rebuildRows()
   }
 
@@ -883,6 +1012,7 @@ QtObject {
 
   // Walks the pre-sorted index, so this only filters.
   function browseEntities(query, filterId) {
+    if (filterId === "room_readings") return root.browseRoomReadings(query)
     var out = []
     var ids = root.sortedEntityIds
     for (var i = 0; i < ids.length; i++) {
@@ -902,15 +1032,134 @@ QtObject {
     return out
   }
 
+  function liveEntitiesForDevice(deviceId) {
+    var registered = root.deviceEntities[deviceId] || []
+    var out = []
+    for (var i = 0; i < registered.length; i++) {
+      if (root.states[registered[i]] !== undefined) out.push(registered[i])
+    }
+    return out
+  }
+
+  function environmentalReadingsForDevice(deviceId) {
+    var entityIds = root.liveEntitiesForDevice(deviceId)
+    var readings = []
+    for (var i = 0; i < entityIds.length; i++) {
+      var reading = Model.environmentalReading(
+        root.states[entityIds[i]], root.deviceInfo[deviceId])
+      if (reading) readings.push(reading)
+    }
+    readings = Model.distinguishEnvironmentalReadings(readings)
+    readings.sort(function(a, b) {
+      return a.order === b.order ? a.label.localeCompare(b.label) : a.order - b.order
+    })
+    return readings
+  }
+
+  function deviceDisplayName(deviceId, entityIds) {
+    var saved = String(root.deviceNames[deviceId] || "").trim()
+    return saved || (entityIds.length ? root.displayName(entityIds[0]) : deviceId)
+  }
+
+  function primaryControlForDevice(deviceId) {
+    var entityIds = root.liveEntitiesForDevice(deviceId)
+    var deviceName = root.deviceDisplayName(deviceId, entityIds)
+    var candidates = []
+    for (var i = 0; i < entityIds.length; i++) {
+      var entityId = entityIds[i]
+      if (Model.isSafePrimaryControl(
+          root.states[entityId], deviceName, root.entityRegistry[entityId])) {
+        candidates.push(entityId)
+      }
+    }
+    return candidates.length === 1 ? candidates[0] : ""
+  }
+
+  function roomReadingCard(deviceId) {
+    var entityIds = root.liveEntitiesForDevice(deviceId)
+    var readings = root.environmentalReadingsForDevice(deviceId)
+    var controlEntityId = root.primaryControlForDevice(deviceId)
+    var iconEntityId = readings.length ? readings[0].entityId : ""
+    var iconEntity = iconEntityId ? root.states[iconEntityId] : null
+    var areaId = root.deviceArea[deviceId]
+      || (entityIds.length ? root.entityArea[entityIds[0]] : "") || ""
+    return {
+      deviceId: deviceId,
+      name: root.deviceDisplayName(deviceId, entityIds),
+      // The registry's first entity is often a battery sensor. The first
+      // sorted environmental reading represents the card itself much better.
+      icon: iconEntity ? root.iconFor(iconEntityId, iconEntity)
+        : (entityIds.length ? root.iconFor(entityIds[0], root.states[entityIds[0]])
+           : Model.FALLBACK_ICON),
+      areaId: areaId,
+      areaName: areaId ? root.areaNames[areaId] || "" : "",
+      readings: readings,
+      summary: Model.roomReadingSummary(readings, 3),
+      controlEntityId: controlEntityId,
+      controlOn: controlEntityId ? root.displayIsOn(controlEntityId) : false,
+      controlPending: !!(controlEntityId
+        && root.pendingToggles[controlEntityId] !== undefined),
+      available: readings.length > 0
+    }
+  }
+
+  function roomReadingMatches(query, card) {
+    var needle = String(query || "").trim().toLowerCase()
+    if (!needle || card.name.toLowerCase().indexOf(needle) !== -1) return true
+    for (var i = 0; i < card.readings.length; i++) {
+      if (card.readings[i].label.toLowerCase().indexOf(needle) !== -1) return true
+    }
+    return false
+  }
+
+  function browseRoomReadings(query) {
+    var out = []
+    for (var deviceId in root.deviceEntities) {
+      var card = root.roomReadingCard(deviceId)
+      if (card.readings.length < 2 || !root.roomReadingMatches(query, card)) continue
+      out.push({
+        entityId: deviceId,
+        name: card.name,
+        icon: card.icon,
+        detail: card.readings.length + " readings"
+          + (card.controlEntityId ? " · on/off" : ""),
+        favorite: root.isRoomReading(deviceId),
+        roomReading: true,
+        pinned: root.isRoomReadingPinned(deviceId)
+      })
+    }
+    out.sort(function(a, b) {
+      return a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+    })
+    return out
+  }
+
   function favoriteSummaries() {
-    return root.favorites.map(function(entityId) {
-      var entity = root.states[entityId]
+    return root.panelOrder.map(function(itemId) {
+      if (itemId.indexOf("room_reading:") === 0) {
+        var deviceId = itemId.slice("room_reading:".length)
+        var card = root.roomReadingCard(deviceId)
+        return {
+          entityId: deviceId,
+          panelItemId: itemId,
+          name: card.name,
+          icon: card.icon,
+          state: card.readings.length + " readings",
+          available: card.available,
+          roomReading: true,
+          pinned: root.isRoomReadingPinned(deviceId)
+        }
+      }
+      var entity = root.states[itemId]
       return {
-        entityId: entityId,
-        name: root.displayName(entityId),
-        icon: root.iconFor(entityId, entity),
+        entityId: itemId,
+        panelItemId: itemId,
+        name: root.displayName(itemId),
+        icon: root.iconFor(itemId, entity),
         state: entity ? Model.displayState(entity) : "Unavailable",
-        available: entity !== undefined
+        available: entity !== undefined,
+        roomReading: false,
+        pinned: false
       }
     })
   }
@@ -923,15 +1172,17 @@ QtObject {
     return false
   }
 
-  readonly property string activitySummary: {
+  function activityEntities() {
     root.stateRevision
-    var picked = []
-    for (var i = 0; i < root.favorites.length; i++) {
-      var entity = root.states[String(root.favorites[i])]
-      if (entity) picked.push(entity)
+    var cards = []
+    for (var roomIndex = 0; roomIndex < root.roomReadings.length; roomIndex++) {
+      cards.push(root.roomReadingCard(root.roomReadings[roomIndex]))
     }
-    return Model.activitySummary(picked)
+    return Model.panelActivityEntities(root.favorites, cards, root.states)
   }
+
+  readonly property string activitySummary: Model.activitySummary(
+    root.activityEntities())
 
   function displayName(entityId) {
     var override = root.displayNameOverrides[entityId]
@@ -949,6 +1200,29 @@ QtObject {
   }
 
   function rowFor(entityId) {
+    if (entityId.indexOf("room_reading:") === 0) {
+      var deviceId = entityId.slice("room_reading:".length)
+      var card = root.roomReadingCard(deviceId)
+      return {
+        entityId: entityId,
+        name: card.name,
+        subtitle: card.areaName,
+        badge: "",
+        icon: card.icon,
+        domain: "",
+        isOn: card.controlOn,
+        pending: card.controlPending,
+        control: card.controlEntityId ? "toggle" : "none",
+        expandable: true,
+        reserveExpandSlot: true,
+        available: card.available,
+        areaId: card.areaId,
+        areaName: card.areaName,
+        rowKind: "room_reading",
+        roomDeviceId: deviceId,
+        controlEntityId: card.controlEntityId
+      }
+    }
     var entity = root.states[entityId]
     return RowModel.project(entityId, entity, {
       name: root.displayName(entityId),
@@ -964,8 +1238,15 @@ QtObject {
   // Falls back to a flat list when it cannot do better: losing rows because
   // area data has not arrived is worse than not grouping.
   function computeTabs() {
+    var selected = root.panelOrder.slice()
+    var mapping = {}
+    for (var entityId in root.entityArea) mapping[entityId] = root.entityArea[entityId]
+    for (var i = 0; i < root.roomReadings.length; i++) {
+      var card = root.roomReadingCard(root.roomReadings[i])
+      if (card.areaId) mapping["room_reading:" + root.roomReadings[i]] = card.areaId
+    }
     return EntityStore.computeTabs(
-      root.favorites, root.groupByArea, root.areaNames, root.entityArea)
+      selected, root.groupByArea, root.areaNames, mapping)
   }
 
   // `activeTab` is the saved intent, `effectiveTab` what exists right now.

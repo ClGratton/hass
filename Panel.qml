@@ -4,6 +4,7 @@ import Quickshell.Io
 import qs.Ui
 import qs.Commons
 import "Model.js" as Model
+import "PanelState.js" as PanelState
 
 // Bar button plus popup panel. Owns the keyboard cursor and the tab selection;
 // the service owns the devices and the connection.
@@ -20,6 +21,9 @@ Panel {
   readonly property string phase: serviceReady ? hass.phase : "idle"
 
   property string expandedEntityId: ""
+  // Pins define the state when the panel opens. This session-only list lets
+  // the user collapse a pinned row without changing that saved default.
+  property var collapsedPinnedRows: []
 
   // One cursor for keyboard and mouse, per the CursorSurface contract.
   // Dormant until a key is pressed.
@@ -33,8 +37,32 @@ Panel {
 
   onOpenedChanged: if (!opened) {
     expandedEntityId = ""
+    collapsedPinnedRows = []
     cursorActive = false
     cursorIndex = 0
+    expandedControlCursorIndex = -1
+  }
+
+  function expansionKey(rowKind, entityId, roomDeviceId) {
+    return PanelState.rowKey(rowKind, entityId, roomDeviceId)
+  }
+
+  function pinnedExpansionVisible(rowKind, entityId, roomDeviceId) {
+    var pinned = rowKind === "room_reading" && serviceReady
+      && hass.isRoomReadingPinned(roomDeviceId)
+    return PanelState.pinnedVisible(
+      pinned, collapsedPinnedRows,
+      expansionKey(rowKind, entityId, roomDeviceId))
+  }
+
+  function toggleRowExpansion(rowKind, entityId, roomDeviceId,
+                              currentlyExpanded, pinned) {
+    var next = PanelState.toggle(
+      collapsedPinnedRows, expandedEntityId,
+      expansionKey(rowKind, entityId, roomDeviceId), entityId,
+      currentlyExpanded, pinned)
+    collapsedPinnedRows = next.collapsedPinnedRows
+    expandedEntityId = next.expandedEntityId
     expandedControlCursorIndex = -1
   }
 
@@ -134,8 +162,8 @@ Panel {
   function expandCursor() {
     var item = currentRow()
     if (!item || !item.expandable) return
-    expandedEntityId = (expandedEntityId === item.entityId) ? "" : item.entityId
-    expandedControlCursorIndex = -1
+    root.toggleRowExpansion(item.rowKind, item.entityId, item.roomDeviceId,
+                            item.expanded, item.roomPinned)
   }
 
   // Colour carries the state, so the button never changes width.
@@ -502,7 +530,9 @@ Panel {
                 reserveExpandSlot: root.serviceReady ? root.hass.rowsHaveExpandable : false
                 hasCursor: root.cursorActive && root.cursorIndex === index
                   && root.expandedControlCursorIndex < 0
-                expanded: root.expandedEntityId === entityId
+                expanded: root.pinnedExpansionVisible(
+                  rowKind, entityId, roomDeviceId)
+                  || root.expandedEntityId === entityId
                 expandedControlCursorIndex: root.cursorIndex === index
                   ? root.expandedControlCursorIndex : -1
                 onCursorRequested: {
@@ -511,10 +541,8 @@ Panel {
                   root.expandedControlCursorIndex = -1
                 }
                 onExpandToggled: {
-                  // One at a time: this is a popup, not a dashboard.
-                  root.expandedEntityId = (root.expandedEntityId === entityId)
-                    ? "" : entityId
-                  root.expandedControlCursorIndex = -1
+                  root.toggleRowExpansion(rowKind, entityId, roomDeviceId,
+                                          expanded, roomPinned)
                 }
                 onExpandedControlCursorRequested: function(controlIndex) {
                   if (controlIndex < 0) return

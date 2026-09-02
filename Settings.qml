@@ -618,6 +618,19 @@ Item {
             root.service.setGroupByArea(!root.service.groupByArea)
           }
         }
+
+        Toggle {
+          width: parent.width
+          label: "Show pin shortcut on hover"
+          description: "Replace an expandable device icon with its pin shortcut while the pointer is over the row."
+          checked: root.service ? root.service.showPanelPinOnHover : false
+          foreground: root.foreground
+          fontFamily: root.family
+          onClicked: if (root.service) {
+            root.service.setShowPanelPinOnHover(
+              !root.service.showPanelPinOnHover)
+          }
+        }
       }
     }
   }
@@ -633,11 +646,12 @@ Item {
       // A known entity's state is replaced in place, so `states` identity does
       // not change on the hot path; stateRevision is what fires these.
       readonly property var favorites: root.service
-        ? (root.shownRevision, root.service.favorites,
+        ? (root.shownRevision, root.service.favorites, root.service.roomReadings,
+           root.service.pinnedRoomReadings,
            root.service.favoriteSummaries())
         : []
       readonly property var results: root.service
-        ? (root.shownRevision, root.service.favorites,
+        ? (root.shownRevision, root.service.favorites, root.service.roomReadings,
            root.service.browseEntities(root.appliedQuery, root.domainFilter))
         : []
 
@@ -743,9 +757,13 @@ Item {
               entityId: modelData.entityId
               name: modelData.name
               icon: modelData.icon
-              detail: modelData.entityId
+              detail: root.domainFilter === "room_readings"
+                ? modelData.detail : modelData.entityId
               favorite: modelData.favorite
               reorderable: false
+              roomReading: root.domainFilter === "room_readings"
+              pinnable: modelData.roomReading === true
+              pinned: modelData.pinned === true
               service: root.service
               family: root.family
             }
@@ -805,6 +823,10 @@ Item {
               detail: modelData.available ? modelData.state : "Unavailable"
               favorite: true
               reorderable: true
+              roomReading: modelData.roomReading
+              pinnable: modelData.roomReading === true
+              pinned: modelData.pinned
+              panelItemId: modelData.panelItemId
               service: root.service
               family: root.family
             }

@@ -32,6 +32,7 @@ const parsed = Config.parse(JSON.stringify({
   favorites: ["light.a", 4, "", "light.a"],
   demoFavorites: [],
   showEntityIcons: false,
+  showPanelPinOnHover: true,
   displayNameOverrides: { "light.a": "Desk", bad: 4 },
   iconOverrides: [],
   selectedTab: "area:kitchen"
@@ -43,12 +44,23 @@ eq("typed values are normalized", parsed.config, {
   demoMode: true,
   favorites: ["light.a"],
   demoFavorites: [],
+  roomReadings: [],
+  demoRoomReadings: [],
+  pinnedRoomReadings: [],
+  demoPinnedRoomReadings: [],
+  panelOrder: ["light.a"],
+  demoPanelOrder: [],
   groupByArea: false,
   showEntityIcons: false,
+  showPanelPinOnHover: true,
   selectedTab: "area:kitchen",
   displayNameOverrides: { "light.a": "Desk" },
   iconOverrides: {}
 });
+
+const defaults = Config.parse("{}", []);
+eq("the panel pin hover shortcut is opt in",
+   defaults.config.showPanelPinOnHover, false);
 
 const withLocal = Config.parse(JSON.stringify({
   baseUrl: "https://ha.example.com",
@@ -58,6 +70,29 @@ const withLocal = Config.parse(JSON.stringify({
 eq("a non-string localUrl falls back to empty", withLocal.config.localUrl, "");
 eq("a non-string trustedNetwork falls back to empty",
    withLocal.config.trustedNetwork, "");
+
+const withRooms = Config.parse(JSON.stringify({
+  favorites: ["light.desk"],
+  roomReadings: ["abc123", "abc123", "device.room", "bad value", "__proto__"],
+  demoRoomReadings: ["device.demo"],
+  pinnedRoomReadings: ["abc123", "missing", "abc123"],
+  demoPinnedRoomReadings: ["device.demo", "missing"],
+  panelOrder: ["room_reading:abc123", "light.desk", "room_reading:missing"],
+  demoPanelOrder: ["room_reading:device.demo", "bad value"]
+}), []);
+eq("room-reading device ids are normalized independently from entity ids",
+   withRooms.config.roomReadings, ["abc123", "device.room"]);
+eq("demo room readings use their own namespace",
+   withRooms.config.demoRoomReadings, ["device.demo"]);
+eq("only selected room readings remain pinned",
+   withRooms.config.pinnedRoomReadings, ["abc123"]);
+eq("demo pins use their own selected room namespace",
+   withRooms.config.demoPinnedRoomReadings, ["device.demo"]);
+eq("one panel order interleaves entities and room-reading cards",
+   withRooms.config.panelOrder, ["room_reading:abc123", "light.desk",
+                                 "room_reading:device.room"]);
+eq("demo panel order is independent",
+   withRooms.config.demoPanelOrder, ["room_reading:device.demo"]);
 
 const merged = Config.merge(parsed.config, {
   groupByArea: true,

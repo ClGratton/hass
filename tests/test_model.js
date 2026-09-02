@@ -122,6 +122,143 @@ section("badges", () => {
      Model.badgeText(entity("climate.a", "heat")), "Heat");
 });
 
+section("room-reading classification", () => {
+  const temperature = entity("sensor.air_temperature", "26", {
+    device_class: "temperature", unit_of_measurement: "°C"
+  });
+  eq("temperature becomes a compact room reading", Model.environmentalReading(temperature), {
+    entityId: "sensor.air_temperature", kind: "temperature", label: "Temperature",
+    sourceLabel: "sensor.air_temperature", value: "26 °C",
+    quality: "neutral", order: 10
+  });
+  eq("PM2.5 gets a quality band",
+     Model.environmentalReading(entity("sensor.air_pm2_5", "5", {
+       device_class: "pm25", unit_of_measurement: "µg/m³"
+     })).quality, "good");
+  eq("VOC index fallback recognizes an unambiguous unitless name",
+     Model.environmentalReading(entity("sensor.air_voc_index", "250")).kind,
+     "voc_index");
+  const ikea = { manufacturer: "IKEA of Sweden", model: "VINDSTYRKA E2112" };
+  eq("VINDSTYRKA uses the Sensirion VOC index bands",
+     Model.environmentalReading(
+       entity("sensor.air_voc_index", "251"), ikea).quality, "poor");
+  eq("VINDSTYRKA VOC index keeps all four documented levels",
+     [150, 151, 251, 401].map((value) => Model.environmentalReading(
+       entity("sensor.air_voc_index", String(value)), ikea).quality),
+     ["good", "moderate", "poor", "critical"]);
+  eq("another vendor's unitless VOC index stays neutral",
+     Model.environmentalReading(entity("sensor.air_voc_index", "251"), {
+       manufacturer: "Other", model: "Monitor"
+     }).quality, "neutral");
+  eq("battery is not treated as a room reading",
+     Model.environmentalReading(entity("sensor.air_battery", "100", {
+       device_class: "battery"
+     })), null);
+  eq("a shared device name cannot turn a battery into temperature",
+     Model.environmentalReading(entity("sensor.temperature_kids_battery", "96", {
+       friendly_name: "Temperature Kids Battery", device_class: "battery",
+       unit_of_measurement: "%"
+     })), null);
+  eq("device class wins over a misleading shared name",
+     Model.environmentalReading(entity("sensor.temperature_kids_humidity", "50", {
+       friendly_name: "Temperature Kids Humidity", device_class: "humidity",
+       unit_of_measurement: "%"
+     })).kind, "humidity");
+  eq("a classless temperature needs an unambiguous name and unit",
+     Model.environmentalReading(entity("sensor.room_probe", "22", {
+       friendly_name: "Room probe", unit_of_measurement: "°C"
+     })), null);
+  eq("a named classless temperature can fall back safely",
+     Model.environmentalReading(entity("sensor.room_temperature", "22", {
+       friendly_name: "Room temperature", unit_of_measurement: "°C"
+     })).kind, "temperature");
+  eq("Home Assistant's canonical AQI device class is accepted",
+     Model.environmentalReading(entity("sensor.outdoor_aqi", "42", {
+       device_class: "aqi"
+     })).kind, "aqi");
+  eq("the non-existent air_quality_index class is not accepted",
+     Model.environmentalReading(entity("sensor.outdoor_aqi", "42", {
+       device_class: "air_quality_index"
+     })), null);
+
+  for (const metric of ["cpu", "memory", "storage", "load"]) {
+    eq(`classless ${metric} percentage is not humidity`,
+       Model.environmentalReading(entity(`sensor.dream_machine_${metric}`, "54", {
+         friendly_name: `Dream Machine ${metric}`, unit_of_measurement: "%"
+       })), null);
+  }
+  eq("classless humidity needs both its name and compatible unit",
+     Model.environmentalReading(entity("sensor.room_humidity", "54", {
+       friendly_name: "Room humidity", unit_of_measurement: "%"
+     })).kind, "humidity");
+
+  eq("CO ppb is converted before applying ppm bands",
+     Model.environmentalQuality("co", "4000", "ppb", null), "good");
+  eq("CO ppm is not confused with ppb",
+     Model.environmentalQuality("co", "4000", "ppm", null), "critical");
+  eq("mass concentration CO stays neutral without a physical conversion",
+     Model.environmentalQuality("co", "4000", "µg/m³", null), "neutral");
+  eq("PM mass concentration accepts equivalent mg units",
+     Model.environmentalQuality("pm25", "0.035", "mg/m³", null), "poor");
+
+  const duplicateHumidity = Model.distinguishEnvironmentalReadings([
+    Model.environmentalReading(entity("sensor.north_humidity", "50", {
+      friendly_name: "North humidity", device_class: "humidity",
+      unit_of_measurement: "%"
+    })),
+    Model.environmentalReading(entity("sensor.south_humidity", "45", {
+      friendly_name: "South humidity", device_class: "humidity",
+      unit_of_measurement: "%"
+    }))
+  ]);
+  eq("duplicate kinds retain distinguishing entity names",
+     duplicateHumidity.map((reading) => reading.label),
+     ["North humidity", "South humidity"]);
+  const sameNamedHumidity = Model.distinguishEnvironmentalReadings([
+    Model.environmentalReading(entity("sensor.north_humidity", "50", {
+      friendly_name: "Humidity", device_class: "humidity",
+      unit_of_measurement: "%"
+    })),
+    Model.environmentalReading(entity("sensor.south_humidity", "45", {
+      friendly_name: "Humidity", device_class: "humidity",
+      unit_of_measurement: "%"
+    }))
+  ]);
+  eq("same-named duplicate kinds fall back to distinct entity object IDs",
+     sameNamedHumidity.map((reading) => reading.label),
+     ["Humidity (north_humidity)", "Humidity (south_humidity)"]);
+
+  const primary = entity("switch.ikea_air_monitor", "on", {
+    friendly_name: "Ikea Air Monitor"
+  });
+  eq("a switch named for its device is a safe primary control",
+     Model.isSafePrimaryControl(primary, "Ikea Air Monitor", {}), true);
+  eq("a configuration entity cannot become the primary control",
+     Model.isSafePrimaryControl(primary, "Ikea Air Monitor",
+       { entityCategory: "config" }), false);
+  eq("identify is never selected as a primary control",
+     Model.isSafePrimaryControl(entity("switch.ikea_air_monitor_identify", "off", {
+       friendly_name: "Ikea Air Monitor Identify"
+     }), "Ikea Air Monitor", {}), false);
+  eq("an unrelated auxiliary switch is not selected",
+     Model.isSafePrimaryControl(entity("switch.child_lock", "off", {
+       friendly_name: "Child lock"
+     }), "Air purifier", {}), false);
+  eq("a unique fan is eligible as an explicit device control",
+     Model.isSafePrimaryControl(entity("fan.purifier", "on", {
+       friendly_name: "Purifier fan"
+     }), "Air purifier", {}), true);
+
+  eq("room summary keeps the first readings compact",
+     Model.roomReadingSummary([
+       { kind: "temperature", label: "Temperature", value: "24.7 °C" },
+       { kind: "humidity", label: "Humidity", value: "46.9 %" },
+       { kind: "co2", label: "CO₂", value: "407 ppm" },
+       { kind: "voc", label: "VOC", value: "12 ppb" },
+       { kind: "pm25", label: "PM2.5", value: "4 µg/m³" }
+     ], 3), "24.7 °C · 46.9 % · CO₂ 407 ppm · +2");
+});
+
 section("brightness", () => {
   // Modern Home Assistant advertises dimming through supported_color_modes.
   eq("a dimmable colour mode counts",
@@ -295,6 +432,22 @@ section("activity summary", () => {
   eq("sensors are left out",
      Model.activitySummary([entity("sensor.a", "22.5"), light("off")]), "All off");
   eq("a missing entity is skipped", Model.activitySummary([null, light("on")]), "1 on");
+
+  const activityStates = {
+    "sensor.room_temperature": entity("sensor.room_temperature", "22.5"),
+    "switch.air_monitor": entity("switch.air_monitor", "on")
+  };
+  const sensorOnly = Model.panelActivityEntities([], [{
+    controlEntityId: "",
+    readings: [{ entityId: "sensor.room_temperature" }]
+  }], activityStates);
+  eq("a sensor-only room still counts as a selected panel item",
+     Model.activitySummary(sensorOnly), "All off");
+  const controlledRoom = Model.panelActivityEntities([], [{
+    controlEntityId: "switch.air_monitor", readings: []
+  }], activityStates);
+  eq("a room primary control participates in activity",
+     Model.activitySummary(controlledRoom), "1 on");
 });
 
 section("demo starter picks match the demo house", () => {

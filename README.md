@@ -89,6 +89,28 @@ your profile → Security), or flip on **Demo mode** to try the panel against a
 built-in fake house with no instance at all. Then switch to **Devices** and
 star the ones you want in the panel.
 
+The **Room readings** category groups environmental sensors that belong to the
+same physical Home Assistant device. Star one device there to add a compact
+card for temperature, humidity, particulate matter, VOC, carbon dioxide and
+other available readings. Individual sensor entities remain available in the
+other categories and can still be starred separately.
+
+Pins that keep expandable rows open are always available in **Devices** settings.
+The optional **Show pin shortcut on hover** toggle in **General** also exposes
+that action over the normal panel icon while a row is hovered. It is off by
+default.
+
+Classification follows Home Assistant's documented
+[`SensorDeviceClass`](https://developers.home-assistant.io/docs/core/entity/sensor/)
+metadata first. A classless sensor is included only when both its entity name
+and unit identify the same environmental measurement, so generic percentage
+sensors such as CPU, memory and storage are not mistaken for humidity. Quality
+bands are display policy rather than Home Assistant metadata and are applied
+only to compatible units. The IKEA VINDSTYRKA's unitless VOC Index uses the
+1–150, 150–250, 250–400 and 400–500 purifier levels documented for its
+[Sensirion sensor](https://sensirion.com/media/documents/ACD82D45/6294DFC0/Info_Note_Integration_VOC_NOx_Sensor.pdf);
+other unitless VOC indices remain neutral.
+
 Optionally, turn on **Local network URL** to add your instance's LAN address.
 It's the same Home Assistant instance reached by a different address, so it
 reuses the one access token above rather than needing its own. It also asks
@@ -121,6 +143,7 @@ node    tests/test_config.js     # config normalization and secret exclusion
 node    tests/test_store.js      # state and registry projections
 node    tests/test_model.js      # entity formatting and classification
 node    tests/test_row_model.js  # ListModel row projection
+node    tests/test_panel_state.js # pinned and temporary expansion state
 python3 tests/test_qml_style.py  # UI house style (fonts, palette, tokens)
 ```
 

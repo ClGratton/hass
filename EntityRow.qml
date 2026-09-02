@@ -20,6 +20,9 @@ CursorSurface {
   required property string control
   required property bool expandable
   required property string domain
+  required property string rowKind
+  required property string roomDeviceId
+  required property string controlEntityId
 
   property var hass: null
   property QtObject bar: null
@@ -48,6 +51,11 @@ CursorSurface {
   readonly property string family: bar ? bar.fontFamily : Style.font.family
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property color inactive: Qt.darker(fg, 1.5)
+  readonly property bool roomReading: row.rowKind === "room_reading"
+  readonly property bool roomPinned: row.roomReading && row.hass !== null
+    && row.hass.isRoomReadingPinned(row.roomDeviceId)
+  readonly property string actionEntityId: row.roomReading
+    ? row.controlEntityId : row.entityId
 
   foreground: fg
   // A fill of its own, or the controls run into the next device.
@@ -78,9 +86,9 @@ CursorSurface {
   function activate() {
     if (!hass || !available) return
     switch (control) {
-    case "toggle": hass.toggleEntity(entityId); break
-    case "lock": hass.setLock(entityId, !isOn); break
-    case "activate": hass.activateScene(entityId); break
+    case "toggle": hass.toggleEntity(actionEntityId); break
+    case "lock": hass.setLock(actionEntityId, !isOn); break
+    case "activate": hass.activateScene(actionEntityId); break
     default: if (expandable) expandToggled()
     }
   }
@@ -89,8 +97,10 @@ CursorSurface {
   readonly property var entity: {
     if (!hass) return null
     hass.stateRevision
-    return hass.entityFor(entityId)
+    return hass.entityFor(actionEntityId)
   }
+
+  HoverHandler { id: rowHover }
 
   // Declared first so the buttons above keep their own clicks.
   MouseArea {
@@ -119,6 +129,8 @@ CursorSurface {
 
     // ---------- main line ----------
     Item {
+      visible: !row.roomReading
+      height: visible ? implicitHeight : 0
       width: parent.width
       implicitHeight: Math.max(glyph.implicitHeight, labels.implicitHeight,
                                controlSlot.implicitHeight)
@@ -207,8 +219,8 @@ CursorSurface {
           foreground: row.fg
           onToggled: {
             if (!row.hass || !row.available) return
-            if (row.control === "lock") row.hass.setLock(row.entityId, !row.isOn)
-            else row.hass.toggleEntity(row.entityId)
+            if (row.control === "lock") row.hass.setLock(row.actionEntityId, !row.isOn)
+            else row.hass.toggleEntity(row.actionEntityId)
           }
         }
 
@@ -222,6 +234,28 @@ CursorSurface {
           foreground: row.dim
           fontFamily: row.family
           onClicked: row.expandToggled()
+        }
+      }
+    }
+
+    Loader {
+      id: roomReadingCard
+      width: parent.width
+      active: row.roomReading && row.hass !== null
+      visible: active
+
+      sourceComponent: Component {
+        RoomReadingsCard {
+          hass: row.hass
+          deviceId: row.roomDeviceId
+          bar: row.bar
+          expanded: row.expanded
+          pinned: row.roomPinned
+          rowHovered: rowHover.hovered
+          showIcon: row.showIcon
+          showPanelPinOnHover: row.hass.showPanelPinOnHover
+          onExpansionRequested: row.expandToggled()
+          onPinRequested: row.hass.toggleRoomReadingPinned(row.roomDeviceId)
         }
       }
     }

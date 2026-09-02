@@ -52,11 +52,34 @@ const registries = Store.projectRegistries(
   [{ area_id: "k", name: "Kitchen" }, { area_id: "h", name: "Hall" }],
   [{ entity_id: "light.a", device_id: "d1" },
    { entity_id: "sensor.b", device_id: "d2", area_id: "h" }],
-  [{ id: "d1", area_id: "k" }, { id: "d2", area_id: "k" }]
+  [{ id: "d1", area_id: "k", name: "Lamp" },
+   { id: "d2", area_id: "k", name_by_user: "Bedroom air" }]
 );
 eq("area names are projected", registries.areaNames, { k: "Kitchen", h: "Hall" });
 eq("entity area wins over its device",
    registries.entityArea, { "light.a": "k", "sensor.b": "h" });
+eq("device names and entity membership are projected",
+   [registries.deviceNames, registries.deviceInfo,
+    registries.deviceEntities, registries.entityRegistry],
+   [{ d1: "Lamp", d2: "Bedroom air" },
+    { d1: { manufacturer: "", model: "" },
+      d2: { manufacturer: "", model: "" } },
+    { d1: ["light.a"], d2: ["sensor.b"] },
+    { "light.a": { entityCategory: "", name: "", originalName: "" },
+      "sensor.b": { entityCategory: "", name: "", originalName: "" } }]);
+eq("device membership is stored in a prototype-free map",
+   Object.getPrototypeOf(registries.deviceEntities), null);
+
+const prototypeNamedDevice = Store.projectRegistries([], [
+  { entity_id: "sensor.safe", device_id: "toString" }
+], [
+  { id: "toString", manufacturer: "IKEA of Sweden", model: "VINDSTYRKA E2112" }
+]);
+eq("a device ID named like an object prototype remains indexable",
+   prototypeNamedDevice.deviceEntities.toString, ["sensor.safe"]);
+eq("device metadata follows the same safe key",
+   prototypeNamedDevice.deviceInfo.toString,
+   { manufacturer: "IKEA of Sweden", model: "VINDSTYRKA E2112" });
 
 // Favourite colours ride along in the registry entry's options, which is the
 // only place Home Assistant publishes them — they are not on the entity state.

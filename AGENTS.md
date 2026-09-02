@@ -123,6 +123,7 @@ node tests/test_connection.js
 node tests/test_store.js
 node tests/test_model.js
 node tests/test_row_model.js
+node tests/test_panel_state.js
 python3 -m py_compile bin/hass-bridge tests/*.py
 bash -n scripts/update-websockets-vendor
 ```
