@@ -380,6 +380,16 @@ function brightnessPercent(entity) {
   return Math.min(Math.max(value / 255.0 * 100.0, 0), 100)
 }
 
+// ---------------------------------------------------------------- cover
+
+// Home Assistant already reports current_position as a 0-100 percentage
+// (100 = fully open), so this only validates and clamps rather than converts.
+function coverPositionPercent(entity) {
+  var value = attrs(entity).current_position
+  if (typeof value !== "number" || !isFinite(value)) return -1
+  return clampNumber(value, 0, 100)
+}
+
 // ---------------------------------------------------------- light colour
 
 // Every mode here accepts hs_color on the way in — Home Assistant converts to
@@ -544,6 +554,13 @@ function colorTempSettled(entity, kelvin) {
 
 function volumeSettled(entity, level) {
   return settledWithin(volumeLevel(entity), level, 0.01)
+}
+
+// Whole percent, like the brightness slider: Home Assistant echoes back the
+// same integer sent, so no device-side rounding slack is needed.
+function coverPositionSettled(entity, percent) {
+  if (typeof percent !== "number" || !isFinite(percent)) return false
+  return settledWithin(coverPositionPercent(entity), percent, 0.5)
 }
 
 // Rounded either side of `round`: float noise must not cost a whole step, nor
@@ -871,6 +888,7 @@ var MEDIA_PLAY = 16384
 
 var COVER_OPEN = 1
 var COVER_CLOSE = 2
+var COVER_SET_POSITION = 4
 var COVER_STOP = 8
 
 var CLIMATE_TARGET_TEMPERATURE = 1
@@ -917,6 +935,7 @@ function capabilitiesFor(entity) {
     coverOpen: false,
     coverStop: false,
     coverClose: false,
+    coverPosition: false,
     climateTarget: false,
     climateRange: false,
     climateHvacMode: false,
@@ -938,6 +957,11 @@ function capabilitiesFor(entity) {
     result.coverOpen = hasFeature(bits, COVER_OPEN)
     result.coverStop = hasFeature(bits, COVER_STOP)
     result.coverClose = hasFeature(bits, COVER_CLOSE)
+    // The feature bit alone is not enough: a cover that is off or has not
+    // reported yet publishes no current_position, and that is exactly the
+    // moment a slider must not appear bound to nothing.
+    result.coverPosition = hasFeature(bits, COVER_SET_POSITION)
+      && typeof a.current_position === "number"
   } else if (available && dom === "climate") {
     result.climateRange = hasFeature(bits, CLIMATE_TARGET_TEMPERATURE_RANGE)
       && typeof a.target_temp_low === "number"
@@ -956,7 +980,8 @@ function capabilitiesFor(entity) {
   result.expandable = result.brightness || result.color || result.colorTemp
     || result.mediaPrevious || result.mediaPlayPause || result.mediaNext
     || result.mediaVolume || result.coverOpen || result.coverStop
-    || result.coverClose || result.climateTarget || result.climateRange
+    || result.coverClose || result.coverPosition
+    || result.climateTarget || result.climateRange
     || result.climateHvacMode || result.climateFanMode
     || result.climatePresetMode || result.climateSwingMode
   // Climate integrations commonly clear the live target while the device is
@@ -1265,6 +1290,7 @@ var DEMO_DEFAULT_FAVORITES = [
   "climate.living_room_thermostat",
   "media_player.living_room_tv",
   "scene.living_room_movie_night",
+  "cover.living_room_blinds",
   "light.kitchen_pendant",
   "switch.kitchen_coffee_maker",
   "sensor.kitchen_temperature",

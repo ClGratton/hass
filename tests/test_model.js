@@ -289,6 +289,15 @@ section("brightness", () => {
      Model.brightnessPercent(entity("light.a", "on")), -1);
 });
 
+section("cover position", () => {
+  eq("current_position passes through",
+     Model.coverPositionPercent(entity("cover.a", "open", { current_position: 70 })), 70);
+  eq("out-of-range position is clamped",
+     Model.coverPositionPercent(entity("cover.a", "open", { current_position: 140 })), 100);
+  eq("missing current_position is signalled with -1",
+     Model.coverPositionPercent(entity("cover.a", "open")), -1);
+});
+
 section("temperature", () => {
   eq("a whole number drops its decimal", Model.formatTemp(22.0, "°C"), "22°C");
   eq("a fraction keeps one place", Model.formatTemp(21.44, "°C"), "21.4°C");
@@ -497,6 +506,9 @@ section("control classification", () => {
      Model.isExpandable(entity("cover.a", "open", { supported_features: 1 })), true);
   eq("cover without advertised actions does not expand",
      Model.isExpandable(entity("cover.a", "open", { supported_features: 0 })), false);
+  eq("cover with only position support still expands",
+     Model.isExpandable(entity("cover.a", "open",
+       { supported_features: 4, current_position: 50 })), true);
   eq("sensor does not", Model.isExpandable(entity("sensor.a", "5")), false);
   // Every expandable domain must have a control to expand into; EntityRow maps
   // them by hand, and a camera has none.
@@ -525,6 +537,20 @@ section("entity capabilities", () => {
   eq("cover advertises open", cover.coverOpen, true);
   eq("cover advertises close", cover.coverClose, true);
   eq("cover hides stop when unsupported", cover.coverStop, false);
+  eq("cover without the position feature has no position control",
+     cover.coverPosition, false);
+
+  const positionable = Model.capabilitiesFor(entity("cover.a", "open", {
+    supported_features: 1 | 2 | 4 | 8, current_position: 70
+  }));
+  eq("cover with the feature and a reported position exposes position control",
+     positionable.coverPosition, true);
+
+  const positionBitNoValue = Model.capabilitiesFor(entity("cover.a", "open", {
+    supported_features: 4
+  }));
+  eq("the position feature alone is not enough without a reported value",
+     positionBitNoValue.coverPosition, false);
 
   const range = Model.capabilitiesFor(entity("climate.a", "heat", {
     supported_features: 2, target_temp_low: 18, target_temp_high: 24
@@ -955,6 +981,14 @@ section("optimistic reconciliation", () => {
      Model.brightnessSettled(lit({ brightness: 128 }), 51), false);
   eq("a positive brightness never settles against an off light",
      Model.brightnessSettled(entity("light.a", "off"), 50), false);
+
+  const shade = (attributes) => entity("cover.a", "open", attributes);
+  eq("cover position settles on the percent it was sent",
+     Model.coverPositionSettled(shade({ current_position: 60 }), 60), true);
+  eq("a different position does not settle it",
+     Model.coverPositionSettled(shade({ current_position: 60 }), 40), false);
+  eq("no reported position never settles",
+     Model.coverPositionSettled(entity("cover.a", "open"), 60), false);
 
   eq("hue is measured the short way round the wheel",
      Model.hueGap(350, 10), 20);

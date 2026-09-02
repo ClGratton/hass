@@ -278,6 +278,7 @@ DEMO_DEVICES = {
     "climate.living_room_thermostat": ("device.living_room_thermostat", "living_room"),
     "media_player.living_room_tv": ("device.living_room_tv", "living_room"),
     "scene.living_room_movie_night": ("device.living_room_scene", "living_room"),
+    "cover.living_room_blinds": ("device.living_room_blinds", "living_room"),
     "light.kitchen_pendant": ("device.kitchen_pendant_light", "kitchen"),
     "switch.kitchen_coffee_maker": ("device.kitchen_coffee_maker", "kitchen"),
     "input_boolean.kitchen_guest_mode": ("device.kitchen_guest_mode", "kitchen"),
@@ -343,6 +344,11 @@ def demo_initial_states():
             "supported_features": 1 | 4 | 16 | 32 | 16384}),
         entity("scene.living_room_movie_night", "unknown", {
             "friendly_name": "Movie Night"}),
+        entity("cover.living_room_blinds", "open", {
+            "friendly_name": "Living Room Blinds", "device_class": "blind",
+            "icon": "mdi:blinds", "current_position": 70,
+            # OPEN | CLOSE | SET_POSITION | STOP
+            "supported_features": 1 | 2 | 4 | 8}),
         entity("light.kitchen_pendant", "on", {
             "friendly_name": "Kitchen Pendant Light", "icon": "mdi:lightbulb-group",
             "brightness": 140, "color_mode": "brightness",
@@ -523,10 +529,22 @@ class DemoTransport:
             self._set_attrs(entity_id, {"volume_level": level})
         elif pair == ("cover", "open_cover"):
             self._set_state(entity_id, "open")
+            if "current_position" in self._states[entity_id]["attributes"]:
+                self._set_attrs(entity_id, {"current_position": 100})
         elif pair == ("cover", "close_cover"):
             self._set_state(entity_id, "closed")
+            if "current_position" in self._states[entity_id]["attributes"]:
+                self._set_attrs(entity_id, {"current_position": 0})
         elif pair == ("cover", "stop_cover"):
             self._set_state(entity_id, "stopped")
+        elif pair == ("cover", "set_cover_position"):
+            position = data.get("position")
+            if not isinstance(position, (int, float)):
+                self._fail(msg_id, "Invalid cover position.")
+                return
+            clamped = max(0, min(100, round(float(position))))
+            self._set_state(entity_id, "open" if clamped > 0 else "closed")
+            self._set_attrs(entity_id, {"current_position": clamped})
         elif pair == ("lock", "lock"):
             self._set_state(entity_id, "locked")
         elif pair == ("lock", "unlock"):
