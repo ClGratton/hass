@@ -791,7 +791,7 @@ def test_demo_needs_no_server():
     try:
         bridge.send({"op": "config"})
         states = bridge.wait_for(lambda e: e["ev"] == "states")
-        check("serves the demo house", states is not None and len(states["entities"]) == 14)
+        check("serves the demo house", states is not None and len(states["entities"]) == 15)
 
         climate_id = "climate.living_room_thermostat"
         bridge.send({"op": "call_service", "domain": "climate", "service": "turn_off",
@@ -854,6 +854,49 @@ def test_demo_needs_no_server():
             lambda e: e["ev"] == "state_changed"
             and e["entity"]["entity_id"] == "cover.garage_door")
         check("mutates demo state", changed is not None and changed["entity"]["state"] == "open")
+
+        blinds_id = "cover.living_room_blinds"
+        bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
+                     "entity_id": blinds_id, "data": {"position": 42},
+                     "tag": "demo-cover-position"})
+        positioned = bridge.wait_for(
+            lambda e: e["ev"] == "state_changed"
+            and e["entity"]["entity_id"] == blinds_id
+            and e["entity"]["attributes"].get("current_position") == 42)
+        check("sets the demo cover position", positioned is not None, positioned)
+        check("a partial position reads as open",
+              positioned is not None and positioned["entity"]["state"] == "open")
+
+        bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
+                     "entity_id": blinds_id, "data": {"position": 0},
+                     "tag": "demo-cover-position-closed"})
+        closed = bridge.wait_for(
+            lambda e: e["ev"] == "state_changed"
+            and e["entity"]["entity_id"] == blinds_id
+            and e["entity"]["attributes"].get("current_position") == 0)
+        check("zero position reads as closed",
+              closed is not None and closed["entity"]["state"] == "closed")
+
+        # Home Assistant's own schema rejects an out-of-range position rather
+        # than clamping it, so the demo backend must fail the call the same
+        # way instead of silently accepting 150 as 100.
+        bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
+                     "entity_id": blinds_id, "data": {"position": 150},
+                     "tag": "demo-cover-position-range"})
+        rejected_range = bridge.wait_for(
+            lambda e: e["ev"] == "result" and e.get("tag") == "demo-cover-position-range")
+        check("rejects an out-of-range demo cover position",
+              rejected_range is not None and rejected_range.get("ok") is False,
+              rejected_range)
+
+        bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
+                     "entity_id": blinds_id, "data": {"position": "half"},
+                     "tag": "demo-cover-position-bad"})
+        rejected_position = bridge.wait_for(
+            lambda e: e["ev"] == "result" and e.get("tag") == "demo-cover-position-bad")
+        check("rejects a non-numeric demo cover position",
+              rejected_position is not None and rejected_position.get("ok") is False,
+              rejected_position)
 
         bridge.send({"op": "call_service", "domain": "cover", "service": "teleport",
                      "entity_id": "cover.garage_door", "tag": "demo-bad"})

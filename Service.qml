@@ -756,6 +756,18 @@ QtObject {
     return root.callTagged("cover", service, entityId, {})
   }
 
+  function setCoverPosition(entityId, percent) {
+    if (!root.capabilities(entityId).coverPosition) {
+      return root.rejectAction("This cover does not support position control.")
+    }
+    if (typeof percent !== "number" || !isFinite(percent)) {
+      return root.rejectAction("Invalid cover position.")
+    }
+    var clamped = Math.max(0, Math.min(100, Math.round(percent)))
+    return root.callTagged("cover", "set_cover_position", entityId,
+                           { position: clamped })
+  }
+
   function setLock(entityId, locked) {
     if (!root.capabilities(entityId).lock) {
       return root.rejectAction("This entity does not support lock control.")

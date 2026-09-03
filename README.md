@@ -33,7 +33,7 @@ refreshes, `esc` closes, and `tab` moves to the next bar panel.
 | `lock` | Lock/unlock switch |
 | `scene`, `script` | Activate button |
 | `media_player` | Previous / play-pause / next, volume slider |
-| `cover` | Open / stop / close |
+| `cover` | Open / stop / close, plus a position slider when the cover reports one |
 | `climate` | On/off when advertised, plus HVAC, fan, preset, swing, and target-temperature or low/high-band controls when advertised |
 | `sensor`, `binary_sensor`, everything else | State display only |
 
