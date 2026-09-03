@@ -546,11 +546,15 @@ section("entity capabilities", () => {
   eq("cover with the feature and a reported position exposes position control",
      positionable.coverPosition, true);
 
+  // current_position is state, not capability: a cover that advertises the
+  // feature but has not reported a position yet (or only reports one while
+  // moving) must still get the control, same as coverOpen/coverClose don't
+  // require the cover to currently be open or closed.
   const positionBitNoValue = Model.capabilitiesFor(entity("cover.a", "open", {
     supported_features: 4
   }));
-  eq("the position feature alone is not enough without a reported value",
-     positionBitNoValue.coverPosition, false);
+  eq("the position feature alone is enough without a reported value",
+     positionBitNoValue.coverPosition, true);
 
   const range = Model.capabilitiesFor(entity("climate.a", "heat", {
     supported_features: 2, target_temp_low: 18, target_temp_high: 24

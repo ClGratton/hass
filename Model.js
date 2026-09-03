@@ -957,11 +957,12 @@ function capabilitiesFor(entity) {
     result.coverOpen = hasFeature(bits, COVER_OPEN)
     result.coverStop = hasFeature(bits, COVER_STOP)
     result.coverClose = hasFeature(bits, COVER_CLOSE)
-    // The feature bit alone is not enough: a cover that is off or has not
-    // reported yet publishes no current_position, and that is exactly the
-    // moment a slider must not appear bound to nothing.
+    // Unlike brightness, current_position is not required: it is a state
+    // attribute, not part of the capability contract, so a cover that
+    // advertises the feature but has not reported a position yet (or reports
+    // one only while moving) must still get the control. coverPositionPercent
+    // already falls back to 0 for the slider when no position is known.
     result.coverPosition = hasFeature(bits, COVER_SET_POSITION)
-      && typeof a.current_position === "number"
   } else if (available && dom === "climate") {
     result.climateRange = hasFeature(bits, CLIMATE_TARGET_TEMPERATURE_RANGE)
       && typeof a.target_temp_low === "number"

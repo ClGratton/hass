@@ -760,6 +760,9 @@ QtObject {
     if (!root.capabilities(entityId).coverPosition) {
       return root.rejectAction("This cover does not support position control.")
     }
+    if (typeof percent !== "number" || !isFinite(percent)) {
+      return root.rejectAction("Invalid cover position.")
+    }
     var clamped = Math.max(0, Math.min(100, Math.round(percent)))
     return root.callTagged("cover", "set_cover_position", entityId,
                            { position: clamped })

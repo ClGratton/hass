@@ -877,14 +877,17 @@ def test_demo_needs_no_server():
         check("zero position reads as closed",
               closed is not None and closed["entity"]["state"] == "closed")
 
+        # Home Assistant's own schema rejects an out-of-range position rather
+        # than clamping it, so the demo backend must fail the call the same
+        # way instead of silently accepting 150 as 100.
         bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
                      "entity_id": blinds_id, "data": {"position": 150},
-                     "tag": "demo-cover-position-clamped"})
-        clamped = bridge.wait_for(
-            lambda e: e["ev"] == "state_changed"
-            and e["entity"]["entity_id"] == blinds_id
-            and e["entity"]["attributes"].get("current_position") == 100)
-        check("an out-of-range position is clamped", clamped is not None, clamped)
+                     "tag": "demo-cover-position-range"})
+        rejected_range = bridge.wait_for(
+            lambda e: e["ev"] == "result" and e.get("tag") == "demo-cover-position-range")
+        check("rejects an out-of-range demo cover position",
+              rejected_range is not None and rejected_range.get("ok") is False,
+              rejected_range)
 
         bridge.send({"op": "call_service", "domain": "cover", "service": "set_cover_position",
                      "entity_id": blinds_id, "data": {"position": "half"},

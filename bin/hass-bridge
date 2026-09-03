@@ -57,6 +57,7 @@ Flags
 """
 
 import json
+import math
 import os
 import queue
 import random
@@ -539,12 +540,21 @@ class DemoTransport:
             self._set_state(entity_id, "stopped")
         elif pair == ("cover", "set_cover_position"):
             position = data.get("position")
-            if not isinstance(position, (int, float)):
+            if (not isinstance(position, (int, float))
+                    or isinstance(position, bool)
+                    or not math.isfinite(position)):
                 self._fail(msg_id, "Invalid cover position.")
                 return
-            clamped = max(0, min(100, round(float(position))))
-            self._set_state(entity_id, "open" if clamped > 0 else "closed")
-            self._set_attrs(entity_id, {"current_position": clamped})
+            # Home Assistant's own schema rejects a position outside 0-100
+            # rather than clamping it; the demo backend should fail the same
+            # calls a real instance would, not silently accept an out-of-range
+            # one.
+            rounded = round(float(position))
+            if rounded < 0 or rounded > 100:
+                self._fail(msg_id, "Cover position must be between 0 and 100.")
+                return
+            self._set_state(entity_id, "open" if rounded > 0 else "closed")
+            self._set_attrs(entity_id, {"current_position": rounded})
         elif pair == ("lock", "lock"):
             self._set_state(entity_id, "locked")
         elif pair == ("lock", "unlock"):
