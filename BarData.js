@@ -16,18 +16,20 @@ function widgetId(kind, identity) {
   return "hass.data." + String(kind || "") + "." + String(identity || "")
 }
 
-// Omarchy 4.0.4 only hands the plugin's data service to entries that use the
-// plugin's own id, so a data instance is `{ id: "hass", dataKind, ... }` and the
-// main widget hosts it. Older releases used a distinct id plus a `source`
-// module; those are still recognised (valid/contains) and migrate() rewrites them.
+// Every reading gets its own id so the shell can drag it on its own. Omarchy
+// 4.0.4 mounts such a module without plugin services; DataBarWidget gets the
+// service from Bridge.js instead. Entries that still use the plugin's own id
+// (written by an earlier build) are recognised, and migrate() rewrites them.
 function entityEntry(entityId) {
   var identity = String(entityId || "")
-  return { id: "hass", dataKind: "entity", entityId: identity }
+  return { id: widgetId("entity", identity), source: DATA_SOURCE,
+           dataKind: "entity", entityId: identity }
 }
 
 function roomEntry(deviceId) {
   var identity = String(deviceId || "")
-  return { id: "hass", dataKind: "room", deviceId: identity }
+  return { id: widgetId("room", identity), source: DATA_SOURCE,
+           dataKind: "room", deviceId: identity }
 }
 
 // The bar layout as the plugin may read it: Omarchy 4.0.4 exposes the public

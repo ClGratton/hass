@@ -6,6 +6,7 @@ import "Connection.js" as Connection
 import "EntityStore.js" as EntityStore
 import "ConfigStore.js" as ConfigStore
 import "RowModel.js" as RowModel
+import "Bridge.js" as Bridge
 
 // Owner of all Home Assistant state.
 //
@@ -14,6 +15,8 @@ import "RowModel.js" as RowModel
 // `bar.shell.serviceFor("hass")`.
 QtObject {
   id: root
+
+  Component.onDestruction: if (Bridge.service() === root) Bridge.publish(null)
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string pluginDir: home + "/.config/omarchy/plugins/hass"
@@ -170,7 +173,10 @@ QtObject {
     command: ["mkdir", "-p", root.configDir]
   }
 
-  Component.onCompleted: root.configDirProcess.running = true
+  Component.onCompleted: {
+    root.configDirProcess.running = true
+    Bridge.publish(root)
+  }
 
   function toggleFavorite(entityId) {
     var favorites = root.favorites.slice()

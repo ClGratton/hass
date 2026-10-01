@@ -4,6 +4,7 @@ import qs.Commons
 import "controls"
 import "Model.js" as Model
 import "BarData.js" as BarData
+import "Bridge.js" as Bridge
 
 // A repeated Home Assistant bar instance. A room instance paints each reading
 // as a child of one compact widget; an entity instance paints only that value.
@@ -29,7 +30,13 @@ BarWidget {
   readonly property real openPanelIndicatorWidth: horizontalContent.implicitWidth
   readonly property real openPanelIndicatorHeight: verticalContent.implicitHeight
 
-  readonly property var hass: bar && bar.shell ? bar.shell.serviceFor("hass") : null
+  // Readings with their own layout id are custom modules, which the shell
+  // mounts without plugin services; the service publishes itself to Bridge.
+  property var bridgedHass: Bridge.service()
+  readonly property var hass: (bar && bar.shell ? bar.shell.serviceFor("hass") : null) || bridgedHass
+  property var bridgeWatch: null
+  Component.onCompleted: bridgeWatch = Bridge.watch(function(service) { root.bridgedHass = service })
+  Component.onDestruction: if (bridgeWatch) Bridge.unwatch(bridgeWatch)
   readonly property string dataKind: String(setting("dataKind", ""))
   readonly property string entityId: String(setting("entityId", ""))
   readonly property string deviceId: String(setting("deviceId", ""))
