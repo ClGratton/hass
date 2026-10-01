@@ -31,7 +31,7 @@ Item {
     && bar.barConfigSerial !== undefined ? bar.barConfigSerial : 0
   readonly property var liveShellConfig: {
     card.barConfigRevision
-    return bar && bar.shell ? bar.shell.shellConfig : null
+    return BarData.readableConfig(bar ? bar.shell : null)
   }
   readonly property var cardData: {
     hass.stateRevision

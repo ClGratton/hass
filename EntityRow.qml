@@ -73,8 +73,7 @@ CursorSurface {
     && row.bar.barConfigSerial !== undefined ? row.bar.barConfigSerial : 0
   readonly property bool barInBar: {
     row.barConfigRevision
-    var config = row.bar && row.bar.shell ? row.bar.shell.shellConfig : null
-    return BarData.contains(config, row.barEntry)
+    return BarData.contains(BarData.readableConfig(row.bar ? row.bar.shell : null), row.barEntry)
   }
 
   function toggleBarData() {

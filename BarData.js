@@ -16,16 +16,26 @@ function widgetId(kind, identity) {
   return "hass.data." + String(kind || "") + "." + String(identity || "")
 }
 
+// Omarchy 4.0.4 only hands the plugin's data service to entries that use the
+// plugin's own id, so a data instance is `{ id: "hass", dataKind, ... }` and the
+// main widget hosts it. Older releases used a distinct id plus a `source`
+// module; those are still recognised (valid/contains) and migrate() rewrites them.
 function entityEntry(entityId) {
   var identity = String(entityId || "")
-  return { id: widgetId("entity", identity), source: DATA_SOURCE,
-           dataKind: "entity", entityId: identity }
+  return { id: "hass", dataKind: "entity", entityId: identity }
 }
 
 function roomEntry(deviceId) {
   var identity = String(deviceId || "")
-  return { id: widgetId("room", identity), source: DATA_SOURCE,
-           dataKind: "room", deviceId: identity }
+  return { id: "hass", dataKind: "room", deviceId: identity }
+}
+
+// The bar layout as the plugin may read it: Omarchy 4.0.4 exposes the public
+// bar config (`shell.barConfig`) instead of the whole shell config.
+function readableConfig(shellApi) {
+  if (!shellApi) return null
+  if (shellApi.shellConfig) return shellApi.shellConfig
+  return shellApi.barConfig ? { bar: shellApi.barConfig } : null
 }
 
 function valid(entry) {
@@ -148,6 +158,7 @@ function layoutCommand(action, base64Entry) {
 }
 
 if (typeof module !== "undefined") module.exports = {
+  readableConfig: readableConfig,
   layoutCommand: layoutCommand,
   entityEntry: entityEntry,
   roomEntry: roomEntry,

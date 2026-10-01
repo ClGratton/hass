@@ -25,10 +25,9 @@ const shell = config()
 
 ok("an entity reading is valid", BarData.valid(first))
 ok("the main panel is not a data instance", !BarData.valid({ id: "hass" }))
-ok("a child has its own stable widget id",
-   first.id === "hass.data.entity.sensor.air_temperature")
-ok("a child loads the data widget directly",
-   first.source === "$HOME/.config/omarchy/plugins/hass/DataBarWidget.qml")
+ok("a data instance uses the plugin's own id (the only form 4.0.4 gives the data service to)",
+   first.id === "hass" && first.dataKind === "entity" && first.entityId === "sensor.air_temperature")
+ok("a data instance carries no source module", first.source === undefined)
 ok("the first reading is added", BarData.add(shell, first))
 ok("the reading is placed beside the main panel",
    shell.bar.layout.right[2].entityId === "sensor.air_temperature")
@@ -44,16 +43,22 @@ ok("removing a missing instance is a no op", !BarData.remove(shell, room))
 const legacy = {
   bar: { layout: { left: [], center: [], right: [
     { id: "hass" },
-    { id: "hass", dataKind: "entity", entityId: "sensor.air_temperature" }
+    { id: "hass.data.entity.sensor.air_temperature",
+      source: "$HOME/.config/omarchy/plugins/hass/DataBarWidget.qml",
+      dataKind: "entity", entityId: "sensor.air_temperature" }
   ] } }
 }
-ok("legacy repeated ids are still recognized", BarData.contains(legacy, first))
-ok("legacy children migrate without touching the main panel",
+ok("older source-module children are still recognized", BarData.contains(legacy, first))
+ok("older source-module children migrate to the plugin id without touching the main panel",
    BarData.migrate(legacy, first)
    && legacy.bar.layout.right[0].id === "hass"
-   && legacy.bar.layout.right[1].id === first.id
-   && legacy.bar.layout.right[1].source === first.source)
+   && legacy.bar.layout.right[1].id === "hass"
+   && legacy.bar.layout.right[1].source === undefined
+   && legacy.bar.layout.right[1].entityId === "sensor.air_temperature")
 ok("migrating a canonical child is a no op", !BarData.migrate(legacy, first))
+ok("the 4.0.4 public bar config is readable through the shell api",
+   BarData.contains(BarData.readableConfig({ barConfig: legacy.bar }), first)
+   && BarData.readableConfig(null) === null)
 
 const empty = { version: 1 }
 ok("a missing layout is created", BarData.add(empty, first)
