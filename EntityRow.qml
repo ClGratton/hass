@@ -78,14 +78,17 @@ CursorSurface {
   }
 
   function toggleBarData() {
-    if (!row.bar || !row.bar.shell
-        || typeof row.bar.shell.mutateShellConfig !== "function") return
+    if (!row.bar) return
     var remove = row.barInBar
     var target = row.barEntry
-    row.bar.shell.mutateShellConfig(function(config) {
-      if (remove) BarData.remove(config, target)
-      else BarData.add(config, target)
-    })
+    var applied = row.bar.shell && typeof row.bar.shell.mutateShellConfig === "function"
+      && row.bar.shell.mutateShellConfig(function(config) {
+        if (remove) BarData.remove(config, target)
+        else BarData.add(config, target)
+      }) !== false
+    // Omarchy 4.0.4 refuses layout edits from a bar widget: use the helper script.
+    if (!applied && typeof row.bar.run === "function")
+      row.bar.run(BarData.layoutCommand(remove ? "remove" : "add", Qt.btoa(JSON.stringify(target))))
   }
 
   foreground: fg

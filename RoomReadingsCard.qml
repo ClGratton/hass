@@ -44,12 +44,16 @@ Item {
   }
 
   function toggleBar(entry) {
-    if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function") return
+    if (!bar) return
     var remove = inBar(entry)
-    bar.shell.mutateShellConfig(function(config) {
-      if (remove) BarData.remove(config, entry)
-      else BarData.add(config, entry)
-    })
+    var applied = bar.shell && typeof bar.shell.mutateShellConfig === "function"
+      && bar.shell.mutateShellConfig(function(config) {
+        if (remove) BarData.remove(config, entry)
+        else BarData.add(config, entry)
+      }) !== false
+    // Omarchy 4.0.4 refuses layout edits from a bar widget: use the helper script.
+    if (!applied && typeof bar.run === "function")
+      bar.run(BarData.layoutCommand(remove ? "remove" : "add", Qt.btoa(JSON.stringify(entry))))
   }
 
   width: parent ? parent.width : 0

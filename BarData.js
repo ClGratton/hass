@@ -6,6 +6,7 @@
 // still use the shared hass service, but can be moved independently.
 
 var DATA_SOURCE = "$HOME/.config/omarchy/plugins/hass/DataBarWidget.qml"
+var LAYOUT_TOOL = "$HOME/.config/omarchy/plugins/hass/bin/hass-bar-layout"
 
 function isPlainObject(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -138,7 +139,16 @@ function remove(config, target) {
   return true
 }
 
+// Omarchy 4.0.4 only lets a replacement bar edit the layout from QML, so a bar
+// widget's mutateShellConfig returns false. The panels then run this helper,
+// which applies add/remove to shell.json with the same rules and reloads the shell.
+function layoutCommand(action, base64Entry) {
+  var verb = action === "remove" ? "remove" : "add"
+  return "python3 \"" + LAYOUT_TOOL + "\" " + verb + " " + String(base64Entry || "").replace(/[^A-Za-z0-9+/=]/g, "")
+}
+
 if (typeof module !== "undefined") module.exports = {
+  layoutCommand: layoutCommand,
   entityEntry: entityEntry,
   roomEntry: roomEntry,
   valid: valid,

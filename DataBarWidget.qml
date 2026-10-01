@@ -85,9 +85,13 @@ BarWidget {
   }
 
   function removeFromBar() {
-    if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function") return
+    if (!bar) return
     var target = targetEntry()
-    bar.shell.mutateShellConfig(function(config) { BarData.remove(config, target) })
+    var applied = bar.shell && typeof bar.shell.mutateShellConfig === "function"
+      && bar.shell.mutateShellConfig(function(config) { BarData.remove(config, target) }) !== false
+    // Omarchy 4.0.4 refuses layout edits from a bar widget: use the helper script.
+    if (!applied && typeof bar.run === "function")
+      bar.run(BarData.layoutCommand("remove", Qt.btoa(JSON.stringify(target))))
   }
 
   function historyEntityIds() {
